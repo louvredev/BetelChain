@@ -1,0 +1,14 @@
+Database/
+docs/
+
+*.db
+
+.env
+
+node_modules/
+.svelte-kit/
+__pycache__/
+*.pyc
+
+*.log
+.DS_Store
