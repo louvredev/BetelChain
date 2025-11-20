@@ -41,7 +41,7 @@ pip install -r requirements.txt
 - Windows
 ```
 python -m venv .virtual
-venv\Scripts\activate.bat
+.virtual\Scripts\activate.bat
 pip install -r requirements.txt
 ```
 ### Develop in Your Branch
