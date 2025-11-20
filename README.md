@@ -4,7 +4,7 @@ BetelChain adalah aplikasi web berbasis machine learning yang membantu pencatata
 
 Git ini dibuat hanya untuk keperluan dokumentasi dalam proses development.
 
-## Tech stack:
+## Tech Stack:
 - **Frontend**: Bun, Vite, VueJS, ShadCN
 - **Backend**: SQLAlchemy, FastAPI
 - **Database**: SQLite
