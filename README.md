@@ -3,9 +3,9 @@
 BetelChain adalah aplikasi web berbasis machine learning untuk kebutuhan pencatatan hasil tani pada warehouse. 
 ## Tech stack:
 - **Frontend**: Bun, Vite, VueJS, ShadCN
-- **Backend**: FastAPI
+- **Backend**: SQLAlchemy, FastAPI
 - **Database**: SQLite
 
-## Prasyarat
-- Python 3.8+ (untuk Flask)
-- Node.js 18+ (untuk Vue)
+## Minimun Requirements
+- Python 3.8+
+- Bun v1.0.0+
