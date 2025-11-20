@@ -48,5 +48,8 @@ pip install -r requirements.txt
 git checkout -b feature/loremipsum
 git push origin feature/loremipsum
 ```
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 ## Preview
 Coming soon
