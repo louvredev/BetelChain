@@ -17,6 +17,8 @@ Git ini dibuat hanya untuk keperluan dokumentasi dalam proses development.
 - Terminal Emulator (CMD, iTerm2, Kitty, etc)
 
 ## Contributing
+Contributions are welcome! Silakan pelajari panduan kontribusi pada [CONTRIBUTING.md](CONTRIBUTING.md).
+
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
