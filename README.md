@@ -1,13 +1,11 @@
 # BetelChain
 
-BetelChain adalah aplikasi web terintegrasi dengan IoT untuk memantau data sensor menggunakan ESP32. Tech stack:
-- **Frontend**: SolidJS, InertiaJS, ShadCN
-- **Backend**: Flask
-- **Database**: PostgreSQL & SQLite
-- **IoT**: MicroPython pada ESP32 dengan PlatformIO
+BetelChain adalah aplikasi web berbasis machine learning untuk kebutuhan pencatatan hasil tani pada warehouse. 
+## Tech stack:
+- **Frontend**: VueJS + ShadCN
+- **Backend**: FastAPI
+- **Database**: SQLite
 
 ## Prasyarat
 - Python 3.8+ (untuk Flask)
 - Node.js 18+ (untuk Vue)
-- PlatformIO (untuk MicroPython di ESP32)
-
