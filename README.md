@@ -9,3 +9,5 @@ BetelChain adalah aplikasi web berbasis machine learning untuk kebutuhan pencata
 ## Minimun Requirements
 - Python 3.8+
 - Bun v1.0.0+
+- Text Editor (Notepad, VSCode, Neovim)
+- Terminal Emulator
