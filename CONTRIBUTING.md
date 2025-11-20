@@ -1,0 +1,33 @@
+## How to Contribute in Development
+Terima kasih atas ketertarikan kamu untuk berkontribusi di project ini!
+<br>Ikuti langkah-langkah berikut untuk menjalankan dan berkontribusi pada project:
+
+### Clone the Repository
+```
+git clone https://github.com/louvredev/BetelChain.git
+```
+### Installing Dependencies
+Frontend:
+<br>Masuk ke direktori `frontend`, lalu lakukan instalasi dengan Bun.
+```
+bun install
+```
+Backend:
+<br>Masuk ke direktori `backend`. Buat dan aktifkan virtual environment, lalu lakukan instalasi dengan pip.
+- Linux/Mac
+```
+python3 -m venv .virtual
+source .virtual/bin/activate
+pip install -r requirements.txt
+```
+- Windows
+```
+python -m venv .virtual
+.virtual\Scripts\activate.bat
+pip install -r requirements.txt
+```
+### Develop in Your Branch
+```
+git checkout -b feature/loremipsum
+git push origin feature/loremipsum
+```
