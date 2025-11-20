@@ -1,4 +1,4 @@
-## Minimum Requirements
+## Prerequisites
 - Python 3.8+
 - Bun v1.0.0+
 - Text Editor (Notepad, VSCode, Neovim, etc)
