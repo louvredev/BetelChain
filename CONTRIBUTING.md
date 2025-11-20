@@ -1,12 +1,12 @@
-## Prerequisites
+## How to Contribute in Development
+Terima kasih atas ketertarikan kamu untuk berkontribusi di project ini!
+<br>Ikuti langkah-langkah berikut untuk menjalankan dan berkontribusi pada project:
+
+### Prerequisites
 - Python 3.8+
 - Bun v1.0.0+
 - Text Editor (Notepad, VSCode, Neovim, etc)
 - Terminal Emulator (CMD, iTerm2, Kitty, etc)
-
-## How to Contribute in Development
-Terima kasih atas ketertarikan kamu untuk berkontribusi di project ini!
-<br>Ikuti langkah-langkah berikut untuk menjalankan dan berkontribusi pada project:
 
 ### Clone the Repository
 ```
