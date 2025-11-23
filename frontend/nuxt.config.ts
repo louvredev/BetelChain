@@ -1,10 +1,36 @@
+// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: [
+    '@nuxt/eslint',
+    '@nuxt/image',
     '@nuxt/ui',
+    '@nuxt/content',
+    '@vueuse/nuxt',
     '@pinia/nuxt'
   ],
 
-  devtools: { enabled: true },
+  devtools: {
+    enabled: true
+  },
+
+  css: ['./app/assets/css/main.css'],
+
+  mdc: {
+    highlight: {
+      noApiRoute: false
+    }
+  },
+
+  routeRules: {
+    '/': { prerender: true },
+    '/api/**': { cors: true }
+  },
+
+  nitro: {
+    prerender: {
+      routes: ['/']
+    }
+  },
 
   runtimeConfig: {
     public: {
@@ -12,15 +38,14 @@ export default defineNuxtConfig({
     }
   },
 
-  nitro: {
-    devProxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true
+  compatibilityDate: '2025-01-15',
+
+  eslint: {
+    config: {
+      stylistic: {
+        commaDangle: 'never',
+        braceStyle: '1tbs'
       }
     }
-  },
-
-  compatibilityDate: '2025-01-01'
+  }
 })
-
