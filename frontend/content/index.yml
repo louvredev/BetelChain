@@ -9,7 +9,7 @@ hero:
       icon: i-lucide-arrow-right
       trailing: true
       color: primary
-      to: https://ui.nuxt.com/docs/getting-started/installation/nuxt
+      to: /login
       target: _blank
       size: xl
     - label: Clone on GitHub

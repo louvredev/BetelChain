@@ -7,88 +7,100 @@ definePageMeta({
   layout: 'dashboard'
 })
 
+const route = useRoute()
+
 const tabItems = [{
-  label: 'All',
-  value: 'all'
-}, {
-  label: 'Unread',
-  value: 'unread'
-}]
-const selectedTab = ref('all')
+    label: 'All',
+    value: 'all'
+  }, {
+    label: 'Unread',
+    value: 'unread'
+  }]
+  const selectedTab = ref('all')
 
-const { data: mails } = await useFetch<Mail[]>('/api/mails', { default: () => [] })
+  const { data: mails } = await useFetch<Mail[]>('/api/mails', { default: () => [] })
 
-// Filter mails based on the selected tab
-const filteredMails = computed(() => {
-  if (selectedTab.value === 'unread') {
-    return mails.value.filter(mail => !!mail.unread)
-  }
+  // Filter mails based on the selected tab
+  const filteredMails = computed(() => {
+    if (selectedTab.value === 'unread') {
+      return mails.value.filter(mail => !!mail.unread)
+    }
 
-  return mails.value
-})
+    return mails.value
+  })
 
-const selectedMail = ref<Mail | null>()
+  const selectedMail = ref<Mail | null>()
 
-const isMailPanelOpen = computed({
-  get() {
-    return !!selectedMail.value
-  },
-  set(value: boolean) {
-    if (!value) {
+  // Auto-select mail from query parameter (for notifications)
+  watch(() => route.query.id, (id) => {
+    if (id) {
+      const mail = mails.value.find(m => m.id === Number(id))
+      if (mail) {
+        selectedMail.value = mail
+      }
+    }
+  }, { immediate: true })
+
+  const isMailPanelOpen = computed({
+    get() {
+      return !!selectedMail.value
+    },
+    set(value: boolean) {
+      if (!value) {
+        selectedMail.value = null
+      }
+    }
+  })
+
+  // Reset selected mail if it's not in the filtered mails
+  watch(filteredMails, () => {
+    if (!filteredMails.value.find(mail => mail.id === selectedMail.value?.id)) {
       selectedMail.value = null
     }
-  }
-})
+  })
 
-// Reset selected mail if it's not in the filtered mails
-watch(filteredMails, () => {
-  if (!filteredMails.value.find(mail => mail.id === selectedMail.value?.id)) {
-    selectedMail.value = null
-  }
-})
+  const breakpoints = useBreakpoints(breakpointsTailwind)
+  const isMobile = breakpoints.smaller('lg')
+  </script>
 
-const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('lg')
-</script>
+  <template>
+    <UDashboardPanel
+      id="inbox-1"
+      :default-size="25"
+      :min-size="20"
+      :max-size="30"
+      resizable
+    >
+      <UDashboardNavbar title="Inbox">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
+        <template #trailing>
+          <UBadge :label="filteredMails.length" variant="subtle" />
+        </template>
 
-<template>
-  <UDashboardPanel
-    id="inbox-1"
-    :default-size="25"
-    :min-size="20"
-    :max-size="30"
-    resizable
-  >
-    <UDashboardNavbar title="Inbox">
-      <template #leading>
-        <UDashboardSidebarCollapse />
-      </template>
-      <template #trailing>
-        <UBadge :label="filteredMails.length" variant="subtle" />
-      </template>
+        <template #right>
+          <UTabs
+            v-model="selectedTab"
+            :items="tabItems"
+            :content="false"
+            size="xs"
+          />
+        </template>
+      </UDashboardNavbar>
+      <DashboardInboxList v-model="selectedMail" :mails="filteredMails" />
+    </UDashboardPanel>
 
-      <template #right>
-        <UTabs
-          v-model="selectedTab"
-          :items="tabItems"
-          :content="false"
-          size="xs"
-        />
-      </template>
-    </UDashboardNavbar>
-    <DashboardInboxInboxList v-model="selectedMail" :mails="filteredMails" />
-  </UDashboardPanel>
+    <DashboardInboxMail v-if="selectedMail" :mail="selectedMail" @close="selectedMail = null" />
+    <div v-else class="hidden lg:flex flex-1 items-center justify-center">
+      <UIcon name="i-lucide-inbox" class="size-32 text-dimmed" />
+    </div>
 
-  <DashboardInboxInboxMail v-if="selectedMail" :mail="selectedMail" @close="selectedMail = null" />
-  <div v-else class="hidden lg:flex flex-1 items-center justify-center">
-    <UIcon name="i-lucide-inbox" class="size-32 text-dimmed" />
-  </div>
-
-  <ClientOnly>
-    <USlideover v-if="isMobile" v-model:open="isMailPanelOpen">
-      <template #content>
-        <DashboardInboxInboxMail v-if="selectedMail" :mail="selectedMail" @close="selectedMail = null" />
-      </template>
-    </USlideover>
-  </ClientOnly>
-</template>
+    <ClientOnly>
+      <USlideover v-if="isMobile" v-model:open="isMailPanelOpen">
+        <template #content>
+          <DashboardInboxMail v-if="selectedMail" :mail="selectedMail" @close="selectedMail = null" />
+        </template>
+      </USlideover>
+    </ClientOnly>
+  </template>

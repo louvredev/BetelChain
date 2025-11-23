@@ -43,7 +43,7 @@ const filteredMembers = computed(() => {
         />
       </template>
 
-      <SettingsMembersList :members="filteredMembers" />
+      <DashboardSettingsMembersList :members="filteredMembers" />
     </UPageCard>
   </div>
 </template>
