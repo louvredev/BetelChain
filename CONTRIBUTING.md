@@ -2,7 +2,7 @@
 Terima kasih atas ketertarikan kamu untuk berkontribusi di project ini!
 <br>Ikuti langkah-langkah berikut untuk menjalankan dan berkontribusi pada project:
 
-### Prerequisites
+### Prequisites
 - Python 3.8+
 - Bun v1.0.0+
 - Text Editor (Notepad, VSCode, Neovim, etc)
