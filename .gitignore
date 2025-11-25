@@ -5,7 +5,6 @@ frontend/nuxt
 frontend/.output
 frontend/node_modules
 frontend/.env
-frontend/public
 frontend/README.md
 database/*.sqlite
 .idea
