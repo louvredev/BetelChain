@@ -1,76 +1,77 @@
-import dill
+import joblib
+import json
 import numpy as np
-from pathlib import Path
+import cv2
 import os
 
+def extract_features_v2(image):
+    """Manual feature extractor"""
+    img_resized = cv2.resize(image, (128, 128))
+    
+    mean_rgb = img_resized.mean(axis=(0, 1)).astype(np.float32)
+    std_rgb = img_resized.std(axis=(0, 1)).astype(np.float32)
+    
+    hsv = cv2.cvtColor(img_resized, cv2.COLOR_RGB2HSV)
+    mean_hsv = hsv.mean(axis=(0, 1)).astype(np.float32)
+    std_hsv = hsv.std(axis=(0, 1)).astype(np.float32)
+    
+    hist_h = cv2.calcHist([hsv], [0], None, [32], [0, 180]).flatten().astype(np.float32)
+    hist_h = hist_h / (hist_h.sum() + 1e-7)
+    
+    hist_s = cv2.calcHist([hsv], [1], None, [16], [0, 256]).flatten().astype(np.float32)
+    hist_s = hist_s / (hist_s.sum() + 1e-7)
+    
+    hist_v = cv2.calcHist([hsv], [2], None, [8], [0, 256]).flatten().astype(np.float32)
+    hist_v = hist_v / (hist_v.sum() + 1e-7)
+    
+    features = np.concatenate([
+        mean_rgb, std_rgb, mean_hsv, std_hsv,
+        hist_h, hist_s, hist_v
+    ]).astype(np.float32)
+    
+    return features
+
 class SackColorSVM:
-    """
-    Wrapper untuk model SVM dari Colab
-    Menggunakan dill.load untuk unpickle model + fungsi
-    """
-    def __init__(self, package_path: str):
-        if not os.path.exists(package_path):
-            raise FileNotFoundError(f"Model file not found: {package_path}")
+    def __init__(self, model_path: str, meta_path: str):
+        print(f"🔄 Loading model from {model_path}...")
+        self.model = joblib.load(model_path)
+        print("   ✅ Model loaded")
         
-        print(f"Loading model from {package_path}...")
-        with open(package_path, "rb") as f:
-            pkg = dill.load(f)
+        print(f"🔄 Loading metadata from {meta_path}...")
+        with open(meta_path, "r") as f:
+            meta = json.load(f)
+        self.classes = meta["classes"]
+        self.grades = meta["grades"]
+        print("   ✅ Metadata loaded")
         
-        self.model = pkg["model"]
-        self.extract_features = pkg["extract_features"]
-        self.classes = pkg["classes"]  # ['merah', 'kuning', 'hijau']
-        self.grades = pkg["grades"]    # ['A', 'B', 'C']
-        print("✅ Model loaded successfully!")
+        print("✅ SVM detector ready!")
     
     def predict(self, img_rgb: np.ndarray):
-        """
-        Predict warna karung dari image RGB
+        features = extract_features_v2(img_rgb).reshape(1, -1)
+        pred_idx = int(self.model.predict(features)[0])
+        probs = self.model.predict_proba(features)[0]
         
-        Args:
-            img_rgb: numpy array RGB format (height, width, 3)
+        warna = self.classes[pred_idx]
+        grade = self.grades[pred_idx]
+        confidence = float(probs[pred_idx] * 100)
         
-        Returns:
-            dict: {
-                'warna': 'merah'/'kuning'/'hijau',
-                'grade': 'A'/'B'/'C',
-                'confidence': float (0-100),
-                'probabilities': dict
-            }
-        """
-        try:
-            # Extract features V2 (68 dimensi)
-            features = self.extract_features(img_rgb).reshape(1, -1)
-            
-            # Predict
-            prediction_idx = self.model.predict(features)[0]
-            probabilities = self.model.predict_proba(features)[0]
-            
-            # Get results
-            warna = self.classes[prediction_idx]
-            grade = self.grades[prediction_idx]
-            confidence = probabilities[prediction_idx] * 100
-            
-            # Get all probabilities
-            prob_dict = {
-                self.classes[i]: round(probabilities[i] * 100, 2)
-                for i in range(len(self.classes))
-            }
-            
-            return {
-                "warna": warna,
-                "grade": grade,
-                "confidence": round(confidence, 2),
-                "probabilities": prob_dict
-            }
-        except Exception as e:
-            raise ValueError(f"Prediction error: {str(e)}")
+        prob_dict = {
+            self.classes[i]: round(float(probs[i]) * 100, 2)
+            for i in range(len(self.classes))
+        }
+        
+        return {
+            "warna": warna,
+            "grade": grade,
+            "confidence": round(confidence, 2),
+            "probabilities": prob_dict
+        }
 
-# Singleton
 _detector = None
 
-def get_detector(model_path: str):
+def get_detector(model_path: str, meta_path: str):
     global _detector
     if _detector is None:
-        _detector = SackColorSVM(model_path)
+        _detector = SackColorSVM(model_path, meta_path)
     return _detector
 

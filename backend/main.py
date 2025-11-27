@@ -7,31 +7,31 @@ from config import settings
 from models.sack_detector import get_detector
 from routers import detect, harvest
 
-# Startup/shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: load model
-    print("🚀 Loading ML model on startup...")
+    print("\n" + "="*60)
+    print("🚀 BETELCHAIN ML SERVICE STARTING...")
+    print("="*60)
+    
     try:
-        detector = get_detector(settings.model_path)
-        print("✅ Model loaded successfully!")
+        detector = get_detector(
+            settings.model_path,
+            settings.meta_path
+        )
+        print("\n✅ ML Model ready!")
     except Exception as e:
-        print(f"❌ Failed to load model: {e}")
+        print(f"\n❌ Error: {e}")
     
     yield
     
-    # Shutdown
-    print("🛑 Shutting down...")
+    print("\n🛑 Shutdown\n")
 
-# Create FastAPI app
 app = FastAPI(
     title="BetelChain ML Service",
-    description="Machine Learning service untuk deteksi warna karung",
     version="1.0.0",
     lifespan=lifespan
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -40,33 +40,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(detect.router)
 app.include_router(harvest.router)
 
-# Root endpoint
 @app.get("/")
-def read_root():
-    return {
-        "service": "BetelChain ML Service",
-        "version": "1.0.0",
-        "status": "running",
-        "docs": "/docs"
-    }
+def root():
+    return {"service": "BetelChain ML", "status": "running", "docs": "/docs"}
 
-# Health check
 @app.get("/health")
-def health_check():
-    return {
-        "status": "healthy",
-        "environment": settings.environment
-    }
+def health():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.debug
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 

@@ -1,34 +1,17 @@
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException
 from datetime import datetime
-from typing import Optional
+from supabase import create_client
 
 from schemas.detection import HarvestRecordRequest, HarvestRecordResponse
 from config import settings
-from supabase import create_client
 
 router = APIRouter(prefix="/api/harvest", tags=["harvest"])
 
-# Init Supabase client
 supabase = create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 @router.post("/record", response_model=HarvestRecordResponse)
 async def create_harvest_record(record: HarvestRecordRequest):
-    """
-    Save harvest record ke Supabase
-    
-    ### Input:
-    ```
-    {
-      "transaction_id": "uuid-xxx",
-      "grade": "A",
-      "sack_color": "red",
-      "weight_kg": 100.0,
-      "detection_confidence": 95.5
-    }
-    ```
-    """
     try:
-        # Insert ke Supabase
         response = supabase.table("harvest_records").insert({
             "transaction_id": record.transaction_id,
             "grade": record.grade,
@@ -39,26 +22,24 @@ async def create_harvest_record(record: HarvestRecordRequest):
             "recorded_at": datetime.utcnow().isoformat()
         }).execute()
         
-        if response.data and len(response.data) > 0:
-            data = response.data[0]
-            return HarvestRecordResponse(
-                id=data["id"],
-                transaction_id=data["transaction_id"],
-                grade=data["grade"],
-                sack_color=data["sack_color"],
-                weight_kg=data["weight_kg"],
-                detection_confidence=data["detection_confidence"],
-                recorded_at=data["recorded_at"]
-            )
-        else:
-            raise HTTPException(status_code=400, detail="Failed to insert record")
-    
+        if not response.data:
+            raise HTTPException(status_code=400, detail="Failed to save")
+        
+        data = response.data[0]
+        return HarvestRecordResponse(
+            id=data["id"],
+            transaction_id=data["transaction_id"],
+            grade=data["grade"],
+            sack_color=data["sack_color"],
+            weight_kg=data["weight_kg"],
+            detection_confidence=data["detection_confidence"],
+            recorded_at=data["recorded_at"]
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/records/{transaction_id}")
 async def get_harvest_records(transaction_id: str):
-    """Get all harvest records untuk transaction tertentu"""
     try:
         response = supabase.table("harvest_records").select("*").eq(
             "transaction_id", transaction_id
@@ -69,5 +50,5 @@ async def get_harvest_records(transaction_id: str):
             "records": response.data
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Query error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 

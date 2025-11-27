@@ -2,9 +2,9 @@ from pydantic import BaseModel
 from typing import Dict, Optional
 
 class DetectionResponse(BaseModel):
-    warna: str  # 'merah', 'kuning', 'hijau'
-    grade: str  # 'A', 'B', 'C'
-    confidence: float  # 0-100
+    warna: str
+    grade: str
+    confidence: float
     probabilities: Dict[str, float]
     detected_at: Optional[str] = None
 

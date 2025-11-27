@@ -1,0 +1,12 @@
+{
+  "classes": [
+    "merah",
+    "kuning",
+    "hijau"
+  ],
+  "grades": [
+    "A",
+    "B",
+    "C"
+  ]
+}
