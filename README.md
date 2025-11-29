@@ -12,8 +12,9 @@ Git ini dibuat hanya untuk keperluan dokumentasi dalam proses development.
 
 ## Contribute
 Contributions are welcome! Pelajari cara untuk kontribusi [di sini](./CONTRIBUTING.md).
-<br>
-<br>Feel free to check our [documentation](./docs) :)
+
+## Documentation
+Feel free to check our [documentation](./docs) :)
 
 ## Preview
 Coming soon
