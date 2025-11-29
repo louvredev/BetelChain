@@ -41,7 +41,10 @@ if settings.DEBUG:
     print(f"MODEL_PATH: {settings.model_path}")
     print(f"META_PATH: {settings.meta_path}")
     print(f"FEATURES_PATH: {settings.features_path}")
-    print(f"SUPABASE_URL: {settings.supabase_url[:30]}..." if settings.supabase_url else "SUPABASE_URL: NOT SET")
+    if settings.supabase_url:
+        print(f"SUPABASE_URL: {settings.supabase_url[:40]}...")
+    else:
+        print("SUPABASE_URL: NOT SET")
     print(f"CORS_ORIGINS: {settings.cors_origins_list}")
     print("="*60 + "\n")
 

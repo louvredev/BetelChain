@@ -1,28 +1,30 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
-from uuid import UUID
-from supabase import create_client
+from supabase import create_client, Client
 
 from schemas.detection import HarvestRecordRequest, HarvestRecordResponse
 from config import settings
 
 router = APIRouter(prefix="/api/harvest", tags=["harvest"])
 
-supabase = create_client(settings.supabase_url, settings.supabase_service_role_key)
+def get_supabase_client() -> Client:
+    """Lazy initialize Supabase client - error jika URL tidak set"""
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        raise HTTPException(
+            status_code=500, 
+            detail="Supabase configuration is missing"
+        )
+    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+
 
 @router.post("/record", response_model=HarvestRecordResponse)
 async def create_harvest_record(record: HarvestRecordRequest):
     """
     Record hasil deteksi karung ke harvest_records table
-    Sesuai dengan DB schema:
-    - transaction_id: uuid (required)
-    - grade: A/B/C (required)
-    - sack_color: red/yellow/green (required)
-    - weight_kg: numeric (default 100)
-    - detected_by: text (default camera_ml)
-    - detection_confidence: numeric
     """
     try:
+        supabase = get_supabase_client()
+        
         # Validate transaction exists
         txn_check = supabase.table("transactions").select("id").eq(
             "id", str(record.transaction_id)
@@ -31,7 +33,7 @@ async def create_harvest_record(record: HarvestRecordRequest):
         if not txn_check.data:
             raise HTTPException(status_code=404, detail="Transaction not found")
         
-        # Map warna to sack_color (merah -> red, kuning -> yellow, hijau -> green)
+        # Map warna to sack_color
         color_map = {
             "merah": "red",
             "kuning": "yellow",
@@ -72,10 +74,10 @@ async def create_harvest_record(record: HarvestRecordRequest):
 
 @router.get("/records/{transaction_id}")
 async def get_harvest_records(transaction_id: str):
-    """
-    Get semua harvest records untuk satu transaction
-    """
+    """Get semua harvest records untuk satu transaction"""
     try:
+        supabase = get_supabase_client()
+        
         response = supabase.table("harvest_records").select("*").eq(
             "transaction_id", transaction_id
         ).order("recorded_at", desc=False).execute()
@@ -92,14 +94,10 @@ async def get_harvest_records(transaction_id: str):
 
 @router.get("/transaction/{transaction_id}/summary")
 async def get_transaction_summary(transaction_id: str):
-    """
-    Get summary untuk transaction:
-    - total weight
-    - total sacks
-    - grade breakdown
-    - average confidence
-    """
+    """Get summary untuk transaction"""
     try:
+        supabase = get_supabase_client()
+        
         records = supabase.table("harvest_records").select("*").eq(
             "transaction_id", transaction_id
         ).execute()
@@ -137,11 +135,10 @@ async def get_transaction_summary(transaction_id: str):
 
 @router.put("/transaction/{transaction_id}/complete")
 async def complete_recording(transaction_id: str):
-    """
-    Mark recording sebagai completed
-    Update recording_status di transactions table menjadi 'completed'
-    """
+    """Mark recording sebagai completed"""
     try:
+        supabase = get_supabase_client()
+        
         response = supabase.table("transactions").update({
             "recording_status": "completed",
             "recording_completed_at": datetime.utcnow().isoformat()
