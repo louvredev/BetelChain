@@ -22,9 +22,16 @@ const links = [[{
     open.value = false
   }
 }, {
-  label: 'Customers',
+  label: 'Transactions',
+  icon: 'i-lucide-receipt-text',
+  to: '/dashboard/transactions',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Farmers & Payments',
   icon: 'i-lucide-users',
-  to: '/dashboard/customers',
+  to: '/dashboard/farmers-payment',
   onSelect: () => {
     open.value = false
   }
