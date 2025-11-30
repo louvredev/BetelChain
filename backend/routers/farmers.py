@@ -224,3 +224,40 @@ async def update_farmer(
     except Exception as e:
         print(f"Error updating farmer: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{farmer_id}/delete")
+async def delete_farmer(
+    farmer_id: str,
+    x_warehouse_id: str = Header(...)
+):
+    """Delete farmer (only by its warehouse)"""
+    try:
+        supabase = get_supabase_client()
+
+        # Check farmer exists
+        farmer_check = supabase.table("farmers").select("*").eq(
+            "id", farmer_id
+        ).execute()
+
+        if not farmer_check.data:
+            raise HTTPException(status_code=404, detail="Farmer not found")
+
+        existing_farmer = farmer_check.data[0]
+
+        # Verify warehouse authorization
+        if existing_farmer["registered_by_warehouse"] != x_warehouse_id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this farmer")
+
+        # Delete farmer
+        response = supabase.table("farmers").delete().eq("id", farmer_id).execute()
+
+        if response.error:
+            raise HTTPException(status_code=400, detail=response.error.get('message', 'Failed to delete farmer'))
+
+        return {"id": farmer_id, "deleted": True}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting farmer: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
