@@ -173,27 +173,14 @@ async def list_transactions(warehouse_id: str):
     try:
         supabase = get_supabase_client()
         
-        response = supabase.table("transactions").select(
-            "id, transaction_code, farmer_id, warehouse_id, initial_price, total_price, payment_status, created_at, farmers(full_name, farmer_code)"
-        ).eq(
+        response = supabase.table("transactions").select("*").eq(
             "warehouse_id", warehouse_id
-        ).order("created_at", desc=True).execute()
-        
-        data = response.data or []
-
-        # Flatten farmer info ke level transaction
-        transactions = []
-        for tx in data:
-            farmer = tx.get("farmers") or {}
-            tx["farmer_name"] = farmer.get("full_name")
-            tx["farmer_code"] = farmer.get("farmer_code")
-            tx.pop("farmers", None)
-            transactions.append(tx)
+            ).order("created_at", desc=True).execute()
 
         return {
             "warehouse_id": warehouse_id,
-            "count": len(transactions),
-            "transactions": transactions
+            "count": len(response.data or []),
+            "transactions": response.data or []
         }
     
     except Exception as e:
