@@ -4,6 +4,7 @@ from supabase import create_client, Client
 from pydantic import BaseModel
 from typing import Optional
 import uuid
+import secrets
 
 from schemas.betelchain import FarmerResponse
 from config import settings
@@ -21,24 +22,14 @@ def get_supabase_client() -> Client:
 
 
 def generate_farmer_code(warehouse_id: str) -> str:
-    """Generate unique farmer code: F{YYYYMMDD}{SEQUENCE}"""
-    try:
-        supabase = get_supabase_client()
-        today = datetime.utcnow().strftime("%Y%m%d")
-        
-        # Get count of farmers registered today
-        response = supabase.table("farmers").select("id").like(
-            "farmer_code", f"F{today}%"
-        ).execute()
-        
-        sequence = len(response.data) + 1
-        farmer_code = f"F{today}{sequence:04d}"
-        
-        return farmer_code
-    except Exception as e:
-        print(f"Error generating farmer code: {e}")
-        # Fallback: use timestamp-based code
-        return f"F{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    """
+    Generate unique farmer code: F{YYYYMMDD}{RANDOM}
+    - Contoh: F20251130A1B2C3
+    """
+    today = datetime.utcnow().strftime("%Y%m%d")
+    # 6 karakter hex acak → 16^6 kemungkinan
+    rand = secrets.token_hex(3).upper()
+    return f"F{today}{rand}"
 
 
 class FarmerRegisterRequest(BaseModel):
