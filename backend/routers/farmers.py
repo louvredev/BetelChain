@@ -251,9 +251,6 @@ async def delete_farmer(
         # Delete farmer
         response = supabase.table("farmers").delete().eq("id", farmer_id).execute()
 
-        if response.error:
-            raise HTTPException(status_code=400, detail=response.error.get('message', 'Failed to delete farmer'))
-
         return {"id": farmer_id, "deleted": True}
 
     except HTTPException:
