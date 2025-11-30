@@ -167,27 +167,38 @@ async def get_transaction(transaction_id: str):
         print(f"Error fetching transaction: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/warehouse/{warehouse_id}/list")
 async def list_transactions(warehouse_id: str):
     """Get semua transactions dari satu warehouse"""
     try:
         supabase = get_supabase_client()
         
-        response = supabase.table("transactions").select("*").eq(
+        response = supabase.table("transactions").select(
+            "id, transaction_code, farmer_id, warehouse_id, initial_price, total_price, payment_status, created_at, farmers(full_name, farmer_code)"
+        ).eq(
             "warehouse_id", warehouse_id
         ).order("created_at", desc=True).execute()
         
+        data = response.data or []
+
+        # Flatten farmer info ke level transaction
+        transactions = []
+        for tx in data:
+            farmer = tx.get("farmers") or {}
+            tx["farmer_name"] = farmer.get("full_name")
+            tx["farmer_code"] = farmer.get("farmer_code")
+            tx.pop("farmers", None)
+            transactions.append(tx)
+
         return {
             "warehouse_id": warehouse_id,
-            "count": len(response.data),
-            "transactions": response.data
+            "count": len(transactions),
+            "transactions": transactions
         }
     
     except Exception as e:
         print(f"Error fetching transactions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/{transaction_id}/start-recording")
 async def start_recording(
