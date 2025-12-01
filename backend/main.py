@@ -6,7 +6,7 @@ import logging
 
 from config import settings
 from models.sack_detector import get_detector
-from routers import detect, transactions, payments, farmers, ml_harvest
+from routers import detect, transactions, payments, farmers, ml_harvest, dashboard
 
 logging.basicConfig(
     level="INFO" if not settings.DEBUG else "DEBUG",
@@ -60,6 +60,7 @@ app.include_router(transactions.router)
 app.include_router(payments.router)
 app.include_router(farmers.router)
 app.include_router(ml_harvest.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/")
