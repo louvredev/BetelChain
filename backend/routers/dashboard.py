@@ -2,6 +2,9 @@ from fastapi import APIRouter, Header, HTTPException
 from supabase import create_client, Client
 from pydantic import BaseModel
 from typing import Dict, Optional
+from datetime import datetime
+from typing import List
+
 
 from config import settings
 
@@ -26,6 +29,10 @@ class WarehouseSummaryResponse(BaseModel):
     grades_breakdown: Dict[str, int]
     total_spent: float
     total_sacks: int
+
+class SpentByHourItem(BaseModel):
+  hour: datetime
+  amount: float
 
 
 @router.get("/warehouse-summary", response_model=WarehouseSummaryResponse)
@@ -105,3 +112,59 @@ async def get_warehouse_summary(
     except Exception as e:
         print("Error in get_warehouse_summary:", e)
         raise HTTPException(status_code=500, detail="Failed to fetch warehouse summary")
+
+@router.get("/spent-by-hour", response_model=List[SpentByHourItem])
+async def get_spent_by_hour(
+  start: datetime,
+  end: datetime,
+  x_warehouse_id: str = Header(..., alias="X-Warehouse-ID")
+):
+  """
+  Total spent per jam (payments approved) untuk satu warehouse,
+  antara start dan end (UTC).
+  """
+  try:
+    supabase = get_supabase_client()
+
+    # Ambil raw payments dulu (filter status + warehouse via transaksi)
+    payments_res = supabase.table("payments") \
+      .select("amount, payment_date, transactions!inner(warehouse_id)") \
+      .eq("transactions.warehouse_id", x_warehouse_id) \
+      .eq("status", "approved") \
+      .gte("payment_date", start.isoformat()) \
+      .lte("payment_date", end.isoformat()) \
+      .execute()
+
+    rows = payments_res.data or []
+
+    # Group by hour di Python (date_trunc('hour'))
+    buckets: dict[str, float] = {}
+
+    for row in rows:
+      payment_date = row.get("payment_date")
+      amount = float(row.get("amount") or 0)
+
+      if not payment_date:
+        continue
+
+      dt = datetime.fromisoformat(payment_date.replace("Z", "+00:00"))
+      dt_hour = dt.replace(minute=0, second=0, microsecond=0)
+      key = dt_hour.isoformat()
+
+      buckets[key] = buckets.get(key, 0.0) + amount
+
+    # Convert ke list terurut by hour
+    items: List[SpentByHourItem] = []
+    for key in sorted(buckets.keys()):
+      items.append(SpentByHourItem(
+        hour=datetime.fromisoformat(key),
+        amount=buckets[key]
+      ))
+
+    return items
+
+  except HTTPException:
+    raise
+  except Exception as e:
+    print("Error in get_spent_by_hour:", e)
+    raise HTTPException(status_code=500, detail="Failed to fetch spent by hour")
