@@ -3,7 +3,7 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 const open = ref(false)
 
-const links = [[{
+const links: NavigationMenuItem[][] = [[{
   label: 'Home',
   icon: 'i-lucide-house',
   to: '/dashboard',
@@ -56,7 +56,7 @@ const links = [[{
       open.value = false
     }
   }]
-}]]] satisfies NavigationMenuItem[][]
+}]] satisfies NavigationMenuItem[][]
 
 const groups = computed(() => [{
   id: 'links',
