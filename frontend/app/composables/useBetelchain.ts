@@ -337,24 +337,27 @@ export const useBetelchain = () => {
   }
 
   const approvePayment = async (paymentId: string, status: string) => {
-    const response = await fetch(
-      `${BACKEND_URL}/api/payments/${paymentId}/approve`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status })
-      }
-    )
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.detail || 'Failed to approve payment')
+  const warehouseId = await getWarehouseId()
+  
+  const response = await fetch(
+    `${BACKEND_URL}/api/payments/${paymentId}/approve`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Warehouse-ID': warehouseId
+      },
+      body: JSON.stringify({ status })
     }
+  )
 
-    return response.json() as Promise<Payment>
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to approve payment')
   }
+
+  return response.json() as Promise<Payment>
+}
 
   return {
     // Farmers
