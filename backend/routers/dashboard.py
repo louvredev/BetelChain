@@ -1,9 +1,21 @@
 from fastapi import APIRouter, Header, HTTPException
+from supabase import create_client, Client
 from pydantic import BaseModel
 from typing import Dict, Optional
-from ..dependencies import get_supabase_client
+
+from config import settings
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+
+def get_supabase_client() -> Client:
+    """Lazy initialize Supabase client"""
+    if not settings.supabase_url or not settings.supabase_service_role_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Supabase configuration is missing"
+        )
+    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 class WarehouseSummaryResponse(BaseModel):
@@ -15,13 +27,22 @@ class WarehouseSummaryResponse(BaseModel):
     total_spent: float
     total_sacks: int
 
+
 @router.get("/warehouse-summary", response_model=WarehouseSummaryResponse)
 async def get_warehouse_summary(
     x_warehouse_id: str = Header(..., alias="X-Warehouse-ID")
 ):
-    supabase = get_supabase_client()
-
+    """
+    Summary per warehouse:
+    - farmers_count: petani aktif yang registered_by_warehouse = warehouse_id
+    - total_spent: total amount payment approved untuk transaksi di warehouse ini
+    - total_sacks: total harvest_records untuk transaksi di warehouse ini
+    - grades_breakdown: jumlah karung per grade A/B/C
+    - dominant_grade + ratio: grade terbanyak + persentasenya
+    """
     try:
+        supabase = get_supabase_client()
+
         # 1) Farmers count (aktif) per warehouse
         farmers_res = supabase.table("farmers") \
             .select("id", count="exact") \
@@ -30,7 +51,8 @@ async def get_warehouse_summary(
             .execute()
         farmers_count = farmers_res.count or 0
 
-        # 2) Total spent = sum(payments.amount) approved untuk transaksi di warehouse ini
+        # 2) Total spent (payments approved untuk transaksi di warehouse ini)
+        # Join payments -> transactions via FKs di Supabase
         payments_res = supabase.table("payments") \
             .select("amount, transactions!inner(warehouse_id)") \
             .eq("transactions.warehouse_id", x_warehouse_id) \
@@ -42,7 +64,7 @@ async def get_warehouse_summary(
             for row in payments_res.data:
                 total_spent += float(row["amount"])
 
-        # 3) Harvest breakdown: total sacks + grade A/B/C count
+        # 3) Harvest: total sacks + grades breakdown
         harvest_res = supabase.table("harvest_records") \
             .select("grade, transactions!inner(warehouse_id)") \
             .eq("transactions.warehouse_id", x_warehouse_id) \
