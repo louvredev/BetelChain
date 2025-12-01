@@ -304,6 +304,7 @@ const scanSack = async () => {
   }
 }
 const approvePaymentLoading = ref<string | null>(null)
+const isPaymentFinal = (status: string) => status !== 'pending'
 
 const onChangePaymentStatus = async (paymentId: string, status: 'approved' | 'rejected') => {
   try {
@@ -590,7 +591,7 @@ const tabs = computed(() => {
                         size="2xs"
                         color="success"
                         variant="soft"
-                        :disabled="p.status === 'approved' || approvePaymentLoading === p.id + 'approved'"
+                        :disabled="isPaymentFinal(p.status) || approvePaymentLoading === p.id + 'approved'"
                         :loading="approvePaymentLoading === p.id + 'approved'"
                         @click="onChangePaymentStatus(p.id, 'approved')"
                       >
@@ -600,7 +601,7 @@ const tabs = computed(() => {
                         size="2xs"
                         color="red"
                         variant="soft"
-                        :disabled="p.status === 'rejected' || approvePaymentLoading === p.id + 'rejected'"
+                        :disabled="isPaymentFinal(p.status) || approvePaymentLoading === p.id + 'rejected'"
                         :loading="approvePaymentLoading === p.id + 'rejected'"
                         @click="onChangePaymentStatus(p.id, 'rejected')"
                       >
@@ -672,36 +673,60 @@ const tabs = computed(() => {
         </template>
 
         <!-- Tab 3: Harvest capture (test) -->
-        <template v-if="isDev" #harvest>
+        <template v-if="isDev || true" #harvest>
           <UCard>
             <template #header>
               <div class="flex items-center justify-between">
-                <p class="font-semibold text-sm">Harvest capture (test)</p>
+                <p class="font-semibold text-sm">Harvest capture</p>
                 <div class="flex items-center gap-2">
+                  <UButton
+                    size="xs"
+                    color="neutral"
+                    variant="outline"
+                    :loading="cameraLoading"
+                    @click="cameraOpen ? closeCamera() : openCamera()"
+                  >
+                    {{ cameraOpen ? 'Close camera' : 'Open camera' }}
+                  </UButton>
                   <UButton
                     size="xs"
                     color="primary"
                     variant="solid"
                     icon="i-lucide-scan-line"
-                    :disabled="scanning"
+                    :disabled="!cameraOpen || scanning"
                     :loading="scanning"
-                    @click="async () => { if (!cameraOpen) await openCamera(); await scanSack() }"
+                    @click="scanSack"
                   >
-                    Scan sack (headless)
+                    Scan sack
                   </UButton>
                 </div>
               </div>
             </template>
 
-            <p class="text-xs text-muted">
-              Kamera berjalan tanpa preview. Tombol ini mengambil satu frame dan mengirim ke model.
-            </p>
+            <div class="space-y-2">
+              <div
+                v-if="cameraOpen"
+                class="relative w-full max-w-md aspect-video bg-black rounded-lg overflow-hidden"
+              >
+                <video
+                  ref="videoEl"
+                  autoplay
+                  playsinline
+                  muted
+                  class="w-full h-full object-cover"
+                />
+                <div class="absolute inset-0 border-2 border-dashed border-primary/70 pointer-events-none" />
+              </div>
+              <p class="text-xs text-muted">
+                Arahkan kamera ke karung, lalu tekan Scan sack untuk mencatat karung ke transaksi ini.
+              </p>
+            </div>
 
-            <!-- Canvas & video disembunyikan -->
-            <video ref="videoEl" class="hidden" autoplay playsinline muted />
+            <!-- Canvas hidden untuk capture frame -->
             <canvas ref="canvasEl" class="hidden" />
           </UCard>
         </template>
+
       </UTabs>
     </div>
   </UDashboardPanel>
