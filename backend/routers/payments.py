@@ -158,13 +158,22 @@ async def list_payments(transaction_id: str):
 
 
 @router.put("/{payment_id}/approve")
-async def approve_payment(payment_id: str, update: PaymentStatusUpdateRequest):
+async def approve_payment(
+    payment_id: str,
+    update: PaymentStatusUpdateRequest,
+    x_warehouse_id: str = Header(...)
+):
     """
-    Admin approve payment
-    Status berubah dari "pending" → "approved"
+    Admin approve/reject payment
+    Status berubah dari "pending" → "approved" atau "rejected"
+    Auto-update transaction payment_status berdasarkan total approved
     """
     try:
         supabase = get_supabase_client()
+        
+        # Validate status
+        if update.status not in ["approved", "rejected", "pending"]:
+            raise HTTPException(status_code=400, detail="Invalid status")
         
         # Get payment
         payment_check = supabase.table("payments").select("*").eq(
@@ -175,31 +184,72 @@ async def approve_payment(payment_id: str, update: PaymentStatusUpdateRequest):
             raise HTTPException(status_code=404, detail="Payment not found")
         
         payment = payment_check.data[0]
+        transaction_id = payment["transaction_id"]
         
-        # Update payment status
-        response = supabase.table("payments").update({
-            "status": update.status,  # "approved", "rejected", etc
+        # Validate transaction & authorization
+        txn_check = supabase.table("transactions").select("*").eq(
+            "id", transaction_id
+        ).execute()
+        
+        if not txn_check.data:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        
+        txn = txn_check.data[0]
+        if txn["warehouse_id"] != x_warehouse_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        
+        # 1. Update payment status
+        payment_response = supabase.table("payments").update({
+            "status": update.status,
             "updated_at": datetime.utcnow().isoformat()
         }).eq("id", payment_id).execute()
         
-        if not response.data:
+        if not payment_response.data:
             raise HTTPException(status_code=400, detail="Failed to update payment")
         
-        data = response.data[0]
+        # 2. Calculate total approved payments
+        all_payments_response = supabase.table("payments").select("*").eq(
+            "transaction_id", transaction_id
+        ).execute()
         
-        # Jika payment approved & ini payment final, update transaction status
-        if update.status == "approved" and payment["payment_type"] == "remaining":
-            txn_update = supabase.table("transactions").update({
-                "payment_status": "completed",
-                "payment_completed_at": datetime.utcnow().isoformat()
-            }).eq("id", payment["transaction_id"]).execute()
+        all_payments = all_payments_response.data or []
+        total_approved = sum(
+            float(p["amount"]) for p in all_payments if p.get("status") == "approved"
+        )
+        
+        # 3. Determine new payment_status for transaction
+        total_price = txn.get("total_price") or 0
+        
+        if total_price == 0:
+            new_payment_status = "unpaid"
+        elif total_approved >= total_price:
+            new_payment_status = "paid"
+            payment_completed_at = datetime.utcnow().isoformat()
+        elif total_approved > 0:
+            new_payment_status = "partial"
+            payment_completed_at = None
+        else:
+            new_payment_status = "unpaid"
+            payment_completed_at = None
+        
+        # 4. Update transaction payment_status
+        txn_update = supabase.table("transactions").update({
+            "payment_status": new_payment_status,
+            "payment_completed_at": payment_completed_at if new_payment_status == "paid" else txn.get("payment_completed_at")
+        }).eq("id", transaction_id).execute()
+        
+        if not txn_update.data:
+            raise HTTPException(status_code=400, detail="Failed to update transaction")
         
         return {
             "success": True,
             "message": f"Payment {update.status}",
             "payment_id": payment_id,
-            "status": data["status"],
-            "updated_at": data.get("updated_at")
+            "payment_status": update.status,
+            "transaction_id": transaction_id,
+            "transaction_payment_status": new_payment_status,
+            "total_approved": total_approved,
+            "total_price": total_price
         }
     
     except HTTPException:
@@ -207,7 +257,6 @@ async def approve_payment(payment_id: str, update: PaymentStatusUpdateRequest):
     except Exception as e:
         print(f"Error updating payment: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/transaction/{transaction_id}/summary")
 async def get_payment_summary(transaction_id: str):
