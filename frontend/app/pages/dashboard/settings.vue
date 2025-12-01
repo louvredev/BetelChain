@@ -11,22 +11,9 @@ const links = [[{
   to: '/dashboard/settings',
   exact: true
 }, {
-  label: 'Members',
-  icon: 'i-lucide-users',
-  to: '/dashboard/settings/members'
-}, {
-  label: 'Notifications',
-  icon: 'i-lucide-bell',
-  to: '/dashboard/settings/notifications'
-}, {
   label: 'Security',
   icon: 'i-lucide-shield',
   to: '/dashboard/settings/security'
-}], [{
-  label: 'Documentation',
-  icon: 'i-lucide-book-open',
-  to: 'https://ui.nuxt.com/docs/getting-started/installation/nuxt',
-  target: '_blank'
 }]] satisfies NavigationMenuItem[][]
 </script>
 

@@ -673,7 +673,7 @@ const tabs = computed(() => {
         </template>
 
         <!-- Tab 3: Harvest capture (test) -->
-        <template v-if="isDev || true" #harvest>
+        <template #harvest>
           <UCard>
             <template #header>
               <div class="flex items-center justify-between">
