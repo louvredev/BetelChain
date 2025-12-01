@@ -31,20 +31,12 @@ nuxtApp.hooks.hookOnce('page:finish', () => {
       <NuxtLink to="/">
         <LandingAppLogo class="w-auto h-6 shrink-0" />
       </NuxtLink>
-
-      <LandingTemplateMenu />
     </template>
 
     <template #right>
       <UNavigationMenu
         :items="items"
         variant="link"
-        class="hidden lg:block"
-      />
-
-      <UButton
-        label="Download App"
-        variant="subtle"
         class="hidden lg:block"
       />
 
@@ -56,12 +48,6 @@ nuxtApp.hooks.hookOnce('page:finish', () => {
         :items="items"
         orientation="vertical"
         class="-mx-2.5"
-      />
-      <UButton
-        class="mt-4"
-        label="Download App"
-        variant="subtle"
-        block
       />
     </template>
   </UHeader>
