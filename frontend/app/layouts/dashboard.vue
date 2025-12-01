@@ -24,7 +24,39 @@ const links = [[{
   onSelect: () => {
     open.value = false
   }
-}]] satisfies NavigationMenuItem[][]
+}, {
+  label: 'Settings',
+  to: '/dashboard/settings',
+  icon: 'i-lucide-settings',
+  defaultOpen: true,
+  type: 'trigger',
+  children: [{
+    label: 'General',
+    to: '/dashboard/settings',
+    exact: true,
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'Members',
+    to: '/dashboard/settings/members',
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'Notifications',
+    to: '/dashboard/settings/notifications',
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
+    label: 'Security',
+    to: '/dashboard/settings/security',
+    onSelect: () => {
+      open.value = false
+    }
+  }]
+}]]] satisfies NavigationMenuItem[][]
 
 const groups = computed(() => [{
   id: 'links',
