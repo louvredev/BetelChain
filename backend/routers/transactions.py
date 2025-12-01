@@ -19,7 +19,6 @@ def get_supabase_client() -> Client:
         )
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
-
 def generate_transaction_code() -> str:
     """Generate unique transaction code: TXN{YYYYMMDD}{SEQUENCE}"""
     try:
@@ -38,12 +37,9 @@ def generate_transaction_code() -> str:
         print(f"Error generating transaction code: {e}")
         return f"TXN{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
 
-
 class TransactionCreateRequest(BaseModel):
     farmer_id: str
     initial_price: float
-    payment_id: Optional[str] = None  # Payment yang sudah dibuat sebelumnya
-
 
 class TransactionResponse(BaseModel):
     id: str
@@ -62,54 +58,32 @@ async def create_transaction(
     transaction_data: TransactionCreateRequest,
     x_warehouse_id: str = Header(...)
 ):
-    """Create transaction dan attach ke payment jika ada"""
+    """Create transaction TANPA payment - payment dibuat setelah dari detail"""
     try:
         supabase = get_supabase_client()
         
-        # Validate payment jika ada
-        if transaction_data.payment_id:
-            payment_check = supabase.table("payments").select("*").eq(
-                "id", transaction_data.payment_id
-            ).execute()
-            
-            if not payment_check.data:
-                raise HTTPException(status_code=404, detail="Payment not found")
-            
-            payment = payment_check.data[0]
-            if payment["status"] != "approved":
-                raise HTTPException(status_code=400, detail="Payment must be approved first")
+        # Validate farmer exists
+        farmer_check = supabase.table("farmers").select("*").eq(
+            "id", transaction_data.farmer_id
+        ).execute()
         
-        # Create transaction
+        if not farmer_check.data:
+            raise HTTPException(status_code=404, detail="Farmer not found")
+        
+        # Create transaction - LANGSUNG unpaid, tanpa payment
         txn_response = supabase.table("transactions").insert({
             "transaction_code": generate_transaction_code(),
             "warehouse_id": x_warehouse_id,
             "farmer_id": transaction_data.farmer_id,
             "initial_price": transaction_data.initial_price,
-            "payment_status": "paid" if transaction_data.payment_id else "unpaid",
+            "payment_status": "unpaid",  # Selalu unpaid di awal
             "created_at": datetime.utcnow().isoformat()
         }).execute()
         
-        txn = txn_response.data[0]
-        txn_id = txn["id"]
+        if not txn_response.data:
+            raise HTTPException(status_code=400, detail="Failed to create transaction")
         
-        # Attach payment jika ada
-        if transaction_data.payment_id:
-            supabase.table("payments").update({
-                "transaction_id": txn_id,
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("id", transaction_data.payment_id).execute()
-            
-            # Set payment_completed_at karena payment sudah approved
-            supabase.table("transactions").update({
-                "payment_completed_at": datetime.utcnow().isoformat()
-            }).eq("id", txn_id).execute()
-        
-        # Fetch transaction lagi untuk return response yang akurat
-        final_response = supabase.table("transactions").select("*").eq(
-            "id", txn_id
-        ).single().execute()
-        
-        return final_response.data
+        return txn_response.data[0]
     
     except HTTPException:
         raise
@@ -150,7 +124,6 @@ async def get_transaction(transaction_id: str):
         print(f"Error fetching transaction: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/warehouse/{warehouse_id}/list")
 async def list_transactions(warehouse_id: str):
     """Get semua transactions dari satu warehouse"""
@@ -170,7 +143,6 @@ async def list_transactions(warehouse_id: str):
     except Exception as e:
         print(f"Error fetching transactions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/{transaction_id}/start-recording")
 async def start_recording(
@@ -217,7 +189,6 @@ async def start_recording(
     except Exception as e:
         print(f"Error starting recording: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.post("/{transaction_id}/complete-recording")
 async def complete_recording(
@@ -297,7 +268,6 @@ async def complete_recording(
     except Exception as e:
         print(f"Error completing recording: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/{transaction_id}/summary")
 async def get_transaction_summary(transaction_id: str):
