@@ -15,21 +15,21 @@ function formatCurrency(value: number): string {
 }
 
 const baseStats = [{
-  title: 'Customers',
+  title: 'Farmers',
   icon: 'i-lucide-users',
   minValue: 400,
   maxValue: 1000,
   minVariation: -15,
   maxVariation: 25
 }, {
-  title: 'Conversions',
+  title: 'Grades',
   icon: 'i-lucide-chart-pie',
   minValue: 1000,
   maxValue: 2000,
   minVariation: -10,
   maxVariation: 20
 }, {
-  title: 'Revenue',
+  title: 'Spent',
   icon: 'i-lucide-circle-dollar-sign',
   minValue: 200000,
   maxValue: 500000,
@@ -37,7 +37,7 @@ const baseStats = [{
   maxVariation: 30,
   formatter: formatCurrency
 }, {
-  title: 'Orders',
+  title: 'Sacks',
   icon: 'i-lucide-shopping-cart',
   minValue: 100,
   maxValue: 300,

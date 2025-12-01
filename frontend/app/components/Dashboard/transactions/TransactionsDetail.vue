@@ -328,16 +328,11 @@ const onChangePaymentStatus = async (paymentId: string, status: 'approved' | 're
     approvePaymentLoading.value = null
   }
 }
-const tabs = computed(() => {
-  const items = [
-    { label: 'Summary', slot: 'summary' },
-    { label: 'Payments', slot: 'payments' }
-  ]
-  if (isDev) {
-    items.push({ label: 'Harvest', slot: 'harvest' })
-  }
-  return items
-})
+const tabs = computed(() => [
+  { label: 'Summary', slot: 'summary' },
+  { label: 'Payments', slot: 'payments' },
+  { label: 'Harvest', slot: 'harvest' }
+])
 </script>
 
 <template>
