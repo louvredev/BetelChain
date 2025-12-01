@@ -1,7 +1,7 @@
 from . import detect
-from . import harvest
 from . import transactions
 from . import payments
 from . import farmers
+from . import ml_harvest
 
-__all__ = ["detect", "harvest", "transactions", "payments", "farmers"]
+__all__ = ["detect", "transactions", "payments", "farmers", "ml_harvest"]

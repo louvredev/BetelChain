@@ -6,7 +6,7 @@ import logging
 
 from config import settings
 from models.sack_detector import get_detector
-from routers import detect, harvest, transactions, payments, farmers, ml_harvest
+from routers import detect, transactions, payments, farmers, ml_harvest
 
 logging.basicConfig(
     level="INFO" if not settings.DEBUG else "DEBUG",
@@ -56,7 +56,6 @@ app.add_middleware(
 logger.info(f"CORS enabled for origins: {settings.cors_origins_list}")
 
 app.include_router(detect.router)
-app.include_router(harvest.router)
 app.include_router(transactions.router)
 app.include_router(payments.router)
 app.include_router(farmers.router)

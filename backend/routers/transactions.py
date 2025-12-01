@@ -3,6 +3,7 @@ from datetime import datetime
 from supabase import create_client, Client
 from pydantic import BaseModel
 from typing import Optional
+from schemas.betelchain import TransactionCreateRequest, TransactionResponse
 import uuid
 
 from config import settings
@@ -25,7 +26,6 @@ def generate_transaction_code() -> str:
         supabase = get_supabase_client()
         today = datetime.utcnow().strftime("%Y%m%d")
         
-        # Get count of transactions created today
         response = supabase.table("transactions").select("id").like(
             "transaction_code", f"TXN{today}%"
         ).execute()
@@ -42,6 +42,7 @@ def generate_transaction_code() -> str:
 class TransactionCreateRequest(BaseModel):
     farmer_id: str
     initial_price: float
+    payment_id: Optional[str] = None  # Payment yang sudah dibuat sebelumnya
 
 
 class TransactionResponse(BaseModel):
@@ -56,83 +57,65 @@ class TransactionResponse(BaseModel):
     recording_completed_at: Optional[str]
     created_at: str
 
-
-@router.post("/create", response_model=TransactionResponse)
+@router.post("/create")
 async def create_transaction(
-    txn: TransactionCreateRequest,
+    transaction_data: TransactionCreateRequest,
     x_warehouse_id: str = Header(...)
 ):
-    """
-    Warehouse membuat transaction baru dengan farmer
-    
-    Request:
-    - farmer_id: ID farmer yang sudah terdaftar
-    - initial_price: Harga awal kesepakatan
-    """
+    """Create transaction dan attach ke payment jika ada"""
     try:
         supabase = get_supabase_client()
         
-        # Validate warehouse exists
-        warehouse_check = supabase.table("warehouses").select("id").eq(
-            "id", x_warehouse_id
-        ).execute()
-        
-        if not warehouse_check.data:
-            raise HTTPException(status_code=404, detail="Warehouse not found")
-        
-        # Validate farmer exists & belongs to this warehouse
-        farmer_check = supabase.table("farmers").select("id, registered_by_warehouse").eq(
-            "id", txn.farmer_id
-        ).execute()
-        
-        if not farmer_check.data:
-            raise HTTPException(status_code=404, detail="Farmer not found")
-        
-        farmer = farmer_check.data[0]
-        if farmer["registered_by_warehouse"] != x_warehouse_id:
-            raise HTTPException(status_code=403, detail="Farmer not registered by this warehouse")
-        
-        # Generate transaction code
-        transaction_code = generate_transaction_code()
+        # Validate payment jika ada
+        if transaction_data.payment_id:
+            payment_check = supabase.table("payments").select("*").eq(
+                "id", transaction_data.payment_id
+            ).execute()
+            
+            if not payment_check.data:
+                raise HTTPException(status_code=404, detail="Payment not found")
+            
+            payment = payment_check.data[0]
+            if payment["status"] != "approved":
+                raise HTTPException(status_code=400, detail="Payment must be approved first")
         
         # Create transaction
-        response = supabase.table("transactions").insert({
-            "id": str(uuid.uuid4()),
-            "transaction_code": transaction_code,
+        txn_response = supabase.table("transactions").insert({
+            "transaction_code": generate_transaction_code(),
             "warehouse_id": x_warehouse_id,
-            "farmer_id": txn.farmer_id,
-            "initial_price": float(txn.initial_price),
-            "total_price": None,  # Will be calculated after recording complete
-            "payment_status": "unpaid",  # Default status
-            "recording_started_at": None,
-            "recording_completed_at": None,
-            "payment_completed_at": None,
+            "farmer_id": transaction_data.farmer_id,
+            "initial_price": transaction_data.initial_price,
+            "payment_status": "paid" if transaction_data.payment_id else "unpaid",
             "created_at": datetime.utcnow().isoformat()
         }).execute()
         
-        if not response.data:
-            raise HTTPException(status_code=400, detail="Failed to create transaction")
+        txn = txn_response.data[0]
+        txn_id = txn["id"]
         
-        data = response.data[0]
-        return TransactionResponse(
-            id=data["id"],
-            transaction_code=data["transaction_code"],
-            farmer_id=data["farmer_id"],
-            warehouse_id=data["warehouse_id"],
-            initial_price=data["initial_price"],
-            total_price=data["total_price"],
-            payment_status=data["payment_status"],
-            recording_started_at=data["recording_started_at"],
-            recording_completed_at=data["recording_completed_at"],
-            created_at=data["created_at"]
-        )
+        # Attach payment jika ada
+        if transaction_data.payment_id:
+            supabase.table("payments").update({
+                "transaction_id": txn_id,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", transaction_data.payment_id).execute()
+            
+            # Set payment_completed_at karena payment sudah approved
+            supabase.table("transactions").update({
+                "payment_completed_at": datetime.utcnow().isoformat()
+            }).eq("id", txn_id).execute()
+        
+        # Fetch transaction lagi untuk return response yang akurat
+        final_response = supabase.table("transactions").select("*").eq(
+            "id", txn_id
+        ).single().execute()
+        
+        return final_response.data
     
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error creating transaction: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
 async def get_transaction(transaction_id: str):
@@ -167,6 +150,7 @@ async def get_transaction(transaction_id: str):
         print(f"Error fetching transaction: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/warehouse/{warehouse_id}/list")
 async def list_transactions(warehouse_id: str):
     """Get semua transactions dari satu warehouse"""
@@ -175,8 +159,8 @@ async def list_transactions(warehouse_id: str):
         
         response = supabase.table("transactions").select("*").eq(
             "warehouse_id", warehouse_id
-            ).order("created_at", desc=True).execute()
-
+        ).order("created_at", desc=True).execute()
+        
         return {
             "warehouse_id": warehouse_id,
             "count": len(response.data or []),
@@ -186,6 +170,7 @@ async def list_transactions(warehouse_id: str):
     except Exception as e:
         print(f"Error fetching transactions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/{transaction_id}/start-recording")
 async def start_recording(
@@ -273,7 +258,8 @@ async def complete_recording(
         total_weight_kg = sum(float(r["weight_kg"]) for r in harvest_records if r.get("weight_kg"))
         
         # Calculate total price: initial_price per kg * total_weight
-        price_per_kg = txn["initial_price"] / 100 if total_weight_kg > 0 else 0  # Adjust formula as needed
+        # (Ini bisa disesuaikan sesuai logic bisnis, untuk now pakai initial_price sebagai basis)
+        price_per_kg = txn["initial_price"] / 100 if total_weight_kg > 0 else 0
         total_price = price_per_kg * total_weight_kg
         
         # Update transaction
@@ -373,17 +359,17 @@ async def get_transaction_summary(transaction_id: str):
                 "farmer_code": farmer.get("farmer_code"),
                 "farmer_name": farmer.get("full_name"),
                 "initial_price": txn["initial_price"],
-                "total_weight_kg": txn["total_weight_kg"],
-                "total_price": txn["total_price"],
+                "total_weight_kg": txn.get("total_weight_kg"),
+                "total_price": txn.get("total_price"),
                 "payment_status": txn["payment_status"],
                 "recording_started_at": txn["recording_started_at"],
                 "recording_completed_at": txn["recording_completed_at"],
-                "payment_completed_at": txn["payment_completed_at"],
+                "payment_completed_at": txn.get("payment_completed_at"),
                 "created_at": txn["created_at"]
             },
             "harvest_summary": {
                 "total_records": len(harvest_records),
-                "total_weight_kg": txn["total_weight_kg"],
+                "total_weight_kg": txn.get("total_weight_kg"),
                 "grade_breakdown": grade_breakdown,
                 "average_confidence": round(
                     sum(float(r["detection_confidence"]) for r in harvest_records) / len(harvest_records), 2
@@ -391,7 +377,7 @@ async def get_transaction_summary(transaction_id: str):
             },
             "payment_summary": {
                 "total_approved": total_approved_payment,
-                "remaining_needed": max(0, (txn["total_price"] or 0) - total_approved_payment),
+                "remaining_needed": max(0, (txn.get("total_price") or 0) - total_approved_payment),
                 "total_payments": len(payments),
                 "payments": payments
             }

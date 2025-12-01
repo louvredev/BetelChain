@@ -3,6 +3,7 @@ from datetime import datetime
 from supabase import create_client, Client
 from pydantic import BaseModel
 from typing import Optional
+import uuid
 
 from schemas.betelchain import PaymentResponse
 from config import settings
@@ -20,8 +21,8 @@ def get_supabase_client() -> Client:
 
 
 class PaymentCreateRequest(BaseModel):
-    transaction_id: str
-    payment_type: str  # "initial" atau "remaining"
+    farmer_id: str
+    transaction_id: Optional[str] = None  # Bisa null, akan di-attach nanti
     amount: float
     payment_method: str
     payment_note: Optional[str] = None
@@ -33,8 +34,8 @@ class PaymentStatusUpdateRequest(BaseModel):
 
 class PaymentResponse(BaseModel):
     id: str
-    transaction_id: str
-    payment_type: str
+    farmer_id: str
+    transaction_id: Optional[str]
     amount: float
     payment_method: str
     status: str
@@ -47,39 +48,47 @@ async def create_payment(
     x_warehouse_id: str = Header(...)
 ):
     """
-    Warehouse membuat payment record (biasanya initial payment)
+    Warehouse nembak harga ke petani & buat payment
+    transaction_id bisa null, akan di-attach nanti saat transaction creation
     
     Request:
-    - transaction_id: ID transaction
-    - payment_type: "initial" atau "remaining"
-    - amount: Jumlah uang
+    - farmer_id: ID petani yang di-nembak harga
+    - transaction_id: Optional, akan di-attach nanti
+    - amount: Jumlah uang nembak
     - payment_method: Cara pembayaran (Bank Transfer, Cash, dll)
     """
     try:
         supabase = get_supabase_client()
         
-        # Validate transaction exists
-        txn_check = supabase.table("transactions").select("id, warehouse_id").eq(
-            "id", payment.transaction_id
+        # Validate warehouse exists
+        warehouse_check = supabase.table("warehouses").select("id").eq(
+            "id", x_warehouse_id
         ).execute()
         
-        if not txn_check.data:
-            raise HTTPException(status_code=404, detail="Transaction not found")
+        if not warehouse_check.data:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
         
-        txn = txn_check.data[0]
+        # Validate farmer exists & belongs to this warehouse
+        farmer_check = supabase.table("farmers").select("id, registered_by_warehouse").eq(
+            "id", payment.farmer_id
+        ).execute()
         
-        # Validate warehouse authorization
-        if txn["warehouse_id"] != x_warehouse_id:
-            raise HTTPException(status_code=403, detail="Not authorized for this transaction")
+        if not farmer_check.data:
+            raise HTTPException(status_code=404, detail="Farmer not found")
+        
+        farmer = farmer_check.data[0]
+        if farmer["registered_by_warehouse"] != x_warehouse_id:
+            raise HTTPException(status_code=403, detail="Farmer not registered by this warehouse")
         
         # Create payment
         response = supabase.table("payments").insert({
-            "transaction_id": payment.transaction_id,
-            "payment_type": payment.payment_type,
-            "amount": payment.amount,
+            "id": str(uuid.uuid4()),
+            "farmer_id": payment.farmer_id,
+            "transaction_id": payment.transaction_id,  # Bisa null
+            "amount": float(payment.amount),
             "payment_method": payment.payment_method,
             "payment_note": payment.payment_note,
-            "status": "pending",  # Default status
+            "status": "pending",
             "payment_date": datetime.utcnow().isoformat(),
             "created_at": datetime.utcnow().isoformat()
         }).execute()
@@ -90,8 +99,8 @@ async def create_payment(
         data = response.data[0]
         return PaymentResponse(
             id=data["id"],
+            farmer_id=data["farmer_id"],
             transaction_id=data["transaction_id"],
-            payment_type=data["payment_type"],
             amount=data["amount"],
             payment_method=data["payment_method"],
             status=data["status"],
@@ -104,6 +113,19 @@ async def create_payment(
         print(f"Error creating payment: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/list")
+async def list_all_payments():
+    """Get semua payments (untuk tabel di frontend)"""
+    try:
+        supabase = get_supabase_client()
+        response = supabase.table("payments").select("*").order("created_at", desc=True).execute()
+        return {
+            "count": len(response.data or []),
+            "payments": response.data or []
+        }
+    except Exception as e:
+        print(f"Error fetching payments: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment(payment_id: str):
@@ -121,8 +143,8 @@ async def get_payment(payment_id: str):
         data = response.data[0]
         return PaymentResponse(
             id=data["id"],
+            farmer_id=data["farmer_id"],
             transaction_id=data["transaction_id"],
-            payment_type=data["payment_type"],
             amount=data["amount"],
             payment_method=data["payment_method"],
             status=data["status"],
@@ -134,7 +156,6 @@ async def get_payment(payment_id: str):
     except Exception as e:
         print(f"Error fetching payment: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/transaction/{transaction_id}/list")
 async def list_payments(transaction_id: str):
@@ -148,8 +169,8 @@ async def list_payments(transaction_id: str):
         
         return {
             "transaction_id": transaction_id,
-            "count": len(response.data),
-            "payments": response.data
+            "count": len(response.data or []),
+            "payments": response.data or []
         }
     
     except Exception as e:
@@ -164,9 +185,9 @@ async def approve_payment(
     x_warehouse_id: str = Header(...)
 ):
     """
-    Admin approve/reject payment
-    Status berubah dari "pending" → "approved" atau "rejected"
-    Auto-update transaction payment_status berdasarkan total approved
+    Approve atau reject payment
+    Status: pending → approved atau rejected
+    Jika payment sudah attached ke transaction, update transaction payment_status
     """
     try:
         supabase = get_supabase_client()
@@ -184,19 +205,28 @@ async def approve_payment(
             raise HTTPException(status_code=404, detail="Payment not found")
         
         payment = payment_check.data[0]
-        transaction_id = payment["transaction_id"]
+        transaction_id = payment.get("transaction_id")
         
-        # Validate transaction & authorization
-        txn_check = supabase.table("transactions").select("*").eq(
-            "id", transaction_id
-        ).execute()
-        
-        if not txn_check.data:
-            raise HTTPException(status_code=404, detail="Transaction not found")
-        
-        txn = txn_check.data[0]
-        if txn["warehouse_id"] != x_warehouse_id:
-            raise HTTPException(status_code=403, detail="Not authorized")
+        # Validate warehouse authorization (jika transaction ada)
+        if transaction_id:
+            txn_check = supabase.table("transactions").select("*").eq(
+                "id", transaction_id
+            ).execute()
+            
+            if not txn_check.data:
+                raise HTTPException(status_code=404, detail="Transaction not found")
+            
+            txn = txn_check.data[0]
+            if txn["warehouse_id"] != x_warehouse_id:
+                raise HTTPException(status_code=403, detail="Not authorized")
+        else:
+            # Jika transaction belum ada, validate farmer ownership
+            farmer_check = supabase.table("farmers").select("registered_by_warehouse").eq(
+                "id", payment["farmer_id"]
+            ).execute()
+            
+            if not farmer_check.data or farmer_check.data[0]["registered_by_warehouse"] != x_warehouse_id:
+                raise HTTPException(status_code=403, detail="Not authorized")
         
         # 1. Update payment status
         payment_response = supabase.table("payments").update({
@@ -207,51 +237,62 @@ async def approve_payment(
         if not payment_response.data:
             raise HTTPException(status_code=400, detail="Failed to update payment")
         
-        # 2. Calculate total approved payments
-        all_payments_response = supabase.table("payments").select("*").eq(
-            "transaction_id", transaction_id
-        ).execute()
-        
-        all_payments = all_payments_response.data or []
-        total_approved = sum(
-            float(p["amount"]) for p in all_payments if p.get("status") == "approved"
-        )
-        
-        # 3. Determine new payment_status for transaction
-        total_price = txn.get("total_price") or 0
-        
-        if total_price == 0:
-            new_payment_status = "unpaid"
-            payment_completed_at = None
-        elif total_approved >= total_price:
-            new_payment_status = "paid"
-            payment_completed_at = datetime.utcnow().isoformat()
-        elif total_approved > 0:
-            new_payment_status = "partial"
-            payment_completed_at = None
+        # 2. Jika transaction ada, update transaction payment_status
+        if transaction_id:
+            # Calculate total approved payments
+            all_payments_response = supabase.table("payments").select("*").eq(
+                "transaction_id", transaction_id
+            ).execute()
+            
+            all_payments = all_payments_response.data or []
+            total_approved = sum(
+                float(p["amount"]) for p in all_payments if p.get("status") == "approved"
+            )
+            
+            # Get transaction to check total_price
+            txn_check = supabase.table("transactions").select("*").eq(
+                "id", transaction_id
+            ).execute()
+            txn = txn_check.data[0]
+            total_price = txn.get("total_price") or txn.get("initial_price") or 0
+            
+            # Determine new payment_status
+            if total_approved >= total_price and total_price > 0:
+                new_payment_status = "paid"
+                payment_completed_at = datetime.utcnow().isoformat()
+            elif total_approved > 0:
+                new_payment_status = "partial"
+                payment_completed_at = None
+            else:
+                new_payment_status = "unpaid"
+                payment_completed_at = None
+            
+            # Update transaction
+            supabase.table("transactions").update({
+                "payment_status": new_payment_status,
+                "payment_completed_at": payment_completed_at if new_payment_status == "paid" else txn.get("payment_completed_at")
+            }).eq("id", transaction_id).execute()
+            
+            return {
+                "success": True,
+                "message": f"Payment {update.status}",
+                "payment_id": payment_id,
+                "payment_status": update.status,
+                "transaction_id": transaction_id,
+                "transaction_payment_status": new_payment_status,
+                "total_approved": total_approved,
+                "total_price": total_price
+            }
         else:
-            new_payment_status = "unpaid"
-            payment_completed_at = None
-        
-        # 4. Update transaction payment_status
-        txn_update = supabase.table("transactions").update({
-            "payment_status": new_payment_status,
-            "payment_completed_at": payment_completed_at if new_payment_status == "paid" else txn.get("payment_completed_at")
-        }).eq("id", transaction_id).execute()
-        
-        if not txn_update.data:
-            raise HTTPException(status_code=400, detail="Failed to update transaction")
-        
-        return {
-            "success": True,
-            "message": f"Payment {update.status}",
-            "payment_id": payment_id,
-            "payment_status": update.status,
-            "transaction_id": transaction_id,
-            "transaction_payment_status": new_payment_status,
-            "total_approved": total_approved,
-            "total_price": total_price
-        }
+            # Payment belum attached ke transaction
+            return {
+                "success": True,
+                "message": f"Payment {update.status}",
+                "payment_id": payment_id,
+                "payment_status": update.status,
+                "transaction_id": None,
+                "note": "Payment not yet attached to any transaction"
+            }
     
     except HTTPException:
         raise
@@ -286,17 +327,14 @@ async def get_payment_summary(transaction_id: str):
         payments = payment_response.data or []
         
         # Calculate totals
-        initial_paid = sum(
-            float(p["amount"]) for p in payments 
-            if p["payment_type"] == "initial" and p["status"] == "approved"
+        total_approved = sum(
+            float(p["amount"]) for p in payments if p.get("status") == "approved"
         )
-        remaining_paid = sum(
-            float(p["amount"]) for p in payments 
-            if p["payment_type"] == "remaining" and p["status"] == "approved"
+        total_pending = sum(
+            float(p["amount"]) for p in payments if p.get("status") == "pending"
         )
-        total_paid = initial_paid + remaining_paid
-        total_price = txn["total_price"]
-        remaining_needed = max(0, total_price - total_paid)
+        total_price = txn.get("total_price") or txn.get("initial_price") or 0
+        remaining_needed = max(0, total_price - total_approved)
         
         # Payment breakdown by status
         payment_by_status = {
@@ -308,11 +346,10 @@ async def get_payment_summary(transaction_id: str):
         return {
             "transaction_id": transaction_id,
             "total_price": total_price,
-            "initial_paid": initial_paid,
-            "remaining_paid": remaining_paid,
-            "total_paid": total_paid,
+            "total_approved": total_approved,
+            "total_pending": total_pending,
             "remaining_needed": remaining_needed,
-            "payment_percentage": round((total_paid / total_price * 100), 2) if total_price > 0 else 0,
+            "payment_percentage": round((total_approved / total_price * 100), 2) if total_price > 0 else 0,
             "payment_status": txn["payment_status"],
             "payment_by_status": payment_by_status,
             "total_payments": len(payments),

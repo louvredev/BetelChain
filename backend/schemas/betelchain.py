@@ -56,14 +56,18 @@ class FarmerUpdateRequest(BaseModel):
 class TransactionCreateRequest(BaseModel):
     farmer_id: str
     initial_price: float
+    payment_id: Optional[str] = None  # NEW: untuk attach payment
+
 
 class TransactionStartRecordingRequest(BaseModel):
     """Request untuk mulai pencatatan hasil tani"""
     pass
 
+
 class TransactionCompleteRecordingRequest(BaseModel):
     """Request untuk selesai pencatatan hasil tani"""
     pass
+
 
 class TransactionResponse(BaseModel):
     id: str
@@ -71,13 +75,14 @@ class TransactionResponse(BaseModel):
     warehouse_id: str
     farmer_id: str
     initial_price: float
-    total_weight_kg: float
-    total_price: float
-    payment_status: str  # unpaid, partial, paid
-    recording_started_at: Optional[str]
-    recording_completed_at: Optional[str]
-    payment_completed_at: Optional[str]
+    total_weight_kg: Optional[float] = None  # CHANGED: optional
+    total_price: Optional[float] = None  # CHANGED: optional
+    payment_status: str  # unpaid, paid (CHANGED: dari unpaid, partial, paid)
+    recording_started_at: Optional[str] = None
+    recording_completed_at: Optional[str] = None
+    payment_completed_at: Optional[str] = None
     created_at: str
+
 
 class TransactionDetailResponse(BaseModel):
     """Transaction dengan detail harvest records"""
@@ -86,8 +91,8 @@ class TransactionDetailResponse(BaseModel):
     warehouse_id: str
     farmer_id: str
     initial_price: float
-    total_weight_kg: float
-    total_price: float
+    total_weight_kg: Optional[float] = None
+    total_price: Optional[float] = None
     payment_status: str
     recording_started_at: Optional[str]
     recording_completed_at: Optional[str]
@@ -97,36 +102,38 @@ class TransactionDetailResponse(BaseModel):
     total_sacks: int
     grade_breakdown: dict  # {"A": int, "B": int, "C": int}
 
+
 # ============================================================================
 # PAYMENTS SCHEMAS
 # ============================================================================
 
 class PaymentCreateRequest(BaseModel):
-    transaction_id: str
-    payment_type: str  # "initial" or "remaining"
+    farmer_id: str  # CHANGED: dari transaction_id ke farmer_id
     amount: float
-    payment_method: Optional[str] = None
+    payment_method: str
     payment_note: Optional[str] = None
     proof_image_url: Optional[str] = None
 
+
 class PaymentResponse(BaseModel):
     id: str
-    transaction_id: str
-    payment_type: str
+    farmer_id: str  # CHANGED: dari transaction_id ke farmer_id
+    transaction_id: Optional[str] = None  # CHANGED: optional, bisa null
     amount: float
-    payment_method: Optional[str]
+    payment_method: str
     payment_note: Optional[str]
     proof_image_url: Optional[str]
+    status: str  # pending, approved, rejected (NEW)
     payment_date: str
     created_at: str
 
+
 class PaymentListResponse(BaseModel):
-    transaction_id: str
+    farmer_id: str  # CHANGED
+    transaction_id: Optional[str] = None  # CHANGED: optional
     total_payments: int
-    initial_payments: List[PaymentResponse]
-    remaining_payments: List[PaymentResponse]
-    total_initial_paid: float
-    total_remaining_paid: float
+    payments: List[PaymentResponse]  # CHANGED: dari split initial/remaining
+    total_amount: float  # NEW
 
 # ============================================================================
 # TRANSACTION DETAIL SCHEMAS
