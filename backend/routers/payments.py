@@ -222,6 +222,7 @@ async def approve_payment(
         
         if total_price == 0:
             new_payment_status = "unpaid"
+            payment_completed_at = None
         elif total_approved >= total_price:
             new_payment_status = "paid"
             payment_completed_at = datetime.utcnow().isoformat()
