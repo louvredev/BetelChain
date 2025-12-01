@@ -168,3 +168,52 @@ async def get_spent_by_hour(
   except Exception as e:
     print("Error in get_spent_by_hour:", e)
     raise HTTPException(status_code=500, detail="Failed to fetch spent by hour")
+
+@router.get('/farmers-payment-summary')
+async def farmers_payment_summary(
+    x_warehouse_id: str = Header(..., alias="X-Warehouse-ID")
+):
+    supabase = get_supabase_client()
+    # 1) Ambil semua farmers untuk warehouse ini
+    farmers = supabase.table("farmers") \
+        .select("*") \
+        .eq("registered_by_warehouse", x_warehouse_id) \
+        .execute().data
+
+    result = []
+
+    for farmer in farmers:
+        farmer_id = farmer["id"]
+
+        # Ambil transaksi petani ini
+        txns = supabase.table("transactions").select("*").eq("farmer_id", farmer_id).execute().data or []
+        txn_ids = [t["id"] for t in txns]
+        totalTransactions = len(txns)
+        totalTagihan = sum(float(t.get("total_price") or 0) for t in txns)
+
+        # Total payment (approved only)
+        if txn_ids:
+            payments = supabase.table("payments") \
+                .select("*") \
+                .in_("transaction_id", txn_ids) \
+                .eq("status", "approved") \
+                .execute().data or []
+        else:
+            payments = []
+
+        totalPaid = sum(float(p.get("amount") or 0) for p in payments)
+        totalOutstanding = max(0, totalTagihan - totalPaid)
+
+        result.append({
+            "id": farmer_id,
+            "farmer_code": farmer["farmer_code"],
+            "full_name": farmer["full_name"],
+            "phone": farmer.get("phone"),
+            "bank_name": farmer.get("bank_name"),
+            "is_active": farmer.get("is_active"),
+            "totalTransactions": totalTransactions,
+            "totalPaid": totalPaid,
+            "totalOutstanding": totalOutstanding
+        })
+
+    return result
