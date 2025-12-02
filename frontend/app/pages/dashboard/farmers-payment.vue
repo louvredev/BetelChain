@@ -125,56 +125,8 @@ const columns: TableColumn<any>[] = [
     accessorKey: 'totalPaid',
     header: 'Total Paid',
     cell: ({ row }) => formatCurrency(row.original.totalPaid)
-  },
-  {
-    accessorKey: 'totalOutstanding',
-    header: 'Outstanding',
-    cell: ({ row }) => formatCurrency(row.original.totalOutstanding)
-  },
-  {
-    id: 'actions',
-    cell: ({ row }) => {
-      const UButton = resolveComponent('UButton')
-      const UDropdownMenu = resolveComponent('UDropdownMenu')
-
-      return h(
-        'div',
-        { class: 'text-right' },
-        h(
-          UDropdownMenu,
-          {
-            content: {
-              align: 'end'
-            },
-            items: getRowItems(row)
-          },
-          () =>
-            h(UButton, {
-              icon: 'i-lucide-ellipsis-vertical',
-              color: 'neutral',
-              variant: 'ghost',
-              class: 'ml-auto'
-            })
-        )
-      )
-    }
   }
 ]
-
-const statusFilter = ref<'all' | 'active' | 'inactive'>('all')
-
-watch(() => statusFilter.value, (newVal) => {
-  if (!table.value?.tableApi) return
-
-  const statusColumn = table.value.tableApi.getColumn('is_active')
-  if (!statusColumn) return
-
-  if (newVal === 'all') {
-    statusColumn.setFilterValue(undefined)
-  } else {
-    statusColumn.setFilterValue(newVal === 'active')
-  }
-})
 
 const pagination = ref({
   pageIndex: 0,
@@ -192,6 +144,7 @@ const formatCurrency = (value: number) => {
 
 const onRegisterSuccess = () => {
   fetchFarmers()}
+
 </script>
 
 <template>
@@ -221,13 +174,13 @@ const onRegisterSuccess = () => {
           }"
         />
 
-        <div class="flex flex-wrap items-center gap-1.5">
+        <div class="flex flex-wrap items-center gap-1.5">        
           <!-- Delete Button -->
-            <DashboardFarmersDeleteModal
-              :count="table?.tableApi?.getFilteredSelectedRowModel().rows.length || 0"
-              :selected-ids="table?.tableApi?.getFilteredSelectedRowModel().rows.map((r: any) => r.original.id) || []"
-              @deleted="fetchFarmers"
-            >
+          <DashboardFarmersDeleteModal
+            :count="table?.tableApi?.getFilteredSelectedRowModel().rows.length || 0"
+            :selected-ids="table?.tableApi?.getFilteredSelectedRowModel().rows.map((r: any) => r.original.id) || []"
+            @deleted="fetchFarmers"
+          >
 
             <template #default="{ open }">
               <UButton
@@ -245,35 +198,7 @@ const onRegisterSuccess = () => {
                 </template>
               </UButton>
             </template>
-          </DashboardFarmersDeleteModal>
-          
-          <!-- Column visibility menu (optional, sama seperti customers) -->
-          <UDropdownMenu
-            :items="
-              table?.tableApi
-                ?.getAllColumns()
-                .filter((column: any) => column.getCanHide?.())
-                .map((column: any) => ({
-                  label: upperFirst(column.id),
-                  type: 'checkbox' as const,
-                  checked: column.getIsVisible?.(),
-                  onUpdateChecked(checked: boolean) {
-                    table?.tableApi?.getColumn(column.id)?.toggleVisibility(!!checked)
-                  },
-                  onSelect(e?: Event) {
-                    e?.preventDefault()
-                  }
-                }))
-            "
-            :content="{ align: 'end' }"
-          >
-            <UButton
-              label="Display"
-              color="neutral"
-              variant="outline"
-              trailing-icon="i-lucide-settings-2"
-            />
-          </UDropdownMenu>        
+          </DashboardFarmersDeleteModal>     
         </div>
       </div>
 

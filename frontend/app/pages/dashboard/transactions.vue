@@ -77,7 +77,27 @@ const isTxPanelOpen = computed({
 })
 
 const isMobile = breakpoints.smaller('lg')
+
+// Handler untuk update transaction setelah approve payment di detail
+const onTransactionUpdated = (updatedTransaction?: Transaction) => {
+  if (!updatedTransaction) {
+    // Untuk aksi yang tidak perlu update list (contoh: scan sack)
+    // Tidak perlu fetch; biarkan list diam
+    return
+  }
+
+  const index = transactions.value.findIndex(t => t.id === updatedTransaction.id)
+  if (index !== -1) {
+    transactions.value[index] = updatedTransaction
+  }
+
+  if (selectedTransaction.value?.id === updatedTransaction.id) {
+    selectedTransaction.value = updatedTransaction
+  }
+}
+
 </script>
+
 
 <template>
   <UDashboardPanel
@@ -104,11 +124,12 @@ const isMobile = breakpoints.smaller('lg')
     />
   </UDashboardPanel>
 
-  <!-- Right panel (detail) - skeleton for now -->
+  <!-- Right panel (detail) -->
   <DashboardTransactionsDetail
     v-if="selectedTransaction"
     :transaction="selectedTransaction"
     @close="selectedTransaction = null"
+    @updated="onTransactionUpdated"
   />
   <div v-else class="hidden lg:flex flex-1 items-center justify-center">
     <UIcon name="i-lucide-receipt-text" class="size-32 text-dimmed" />
@@ -122,6 +143,7 @@ const isMobile = breakpoints.smaller('lg')
           v-if="selectedTransaction"
           :transaction="selectedTransaction"
           @close="selectedTransaction = null"
+          @updated="onTransactionUpdated"
         />
       </template>
     </USlideover>

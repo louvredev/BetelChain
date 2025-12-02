@@ -18,32 +18,12 @@ const links: NavigationMenuItem[][] = [[{
     open.value = false
   }
 }, {
-  label: 'Farmers & Payments',
+  label: 'Farmers',
   icon: 'i-lucide-users',
   to: '/dashboard/farmers-payment',
   onSelect: () => {
     open.value = false
   }
-}, {
-  label: 'Settings',
-  to: '/dashboard/settings',
-  icon: 'i-lucide-settings',
-  defaultOpen: true,
-  type: 'trigger',
-  children: [{
-    label: 'General',
-    to: '/dashboard/settings',
-    exact: true,
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
-    label: 'Security',
-    to: '/dashboard/settings/security',
-    onSelect: () => {
-      open.value = false
-    }
-  }]
 }]] satisfies NavigationMenuItem[][]
 
 const groups = computed(() => [{

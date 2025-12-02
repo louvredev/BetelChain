@@ -14,13 +14,14 @@ export const useBetelchain = () => {
 
   // Get warehouse ID from localStorage
   const getWarehouseId = async () => {
-    const stored = localStorage.getItem('warehouseId')
-    if (stored) return stored
-
-    const demoId = '51b51eb1-2552-431e-b53b-b5bfb856a70b'
-    localStorage.setItem('warehouseId', demoId)
-    return demoId
+    const warehouseId = useState('warehouseId', () => {
+      if (process.server) return '51b51eb1-2552-431e-b53b-b5bfb856a70b'
+      return localStorage.getItem('warehouseId') || '51b51eb1-2552-431e-b53b-b5bfb856a70b'
+    })
+    
+    return warehouseId.value
   }
+
 
   // ==================== DASHBOARD ====================
 

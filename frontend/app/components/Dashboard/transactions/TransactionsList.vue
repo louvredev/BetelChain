@@ -39,8 +39,16 @@ defineShortcuts({
 
 const formatDate = (d?: string | null) => {
   if (!d) return ''
-  return format(new Date(d), 'dd MMM HH:mm')
+  const date = new Date(d)
+  return date.toLocaleString('id-ID', { 
+    timeZone: 'Asia/Jakarta',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
+
 </script>
 
 <template>
@@ -83,12 +91,12 @@ const formatDate = (d?: string | null) => {
                 Initial: {{ tx.initial_price?.toLocaleString('id-ID') }} IDR
             </span>
             <UBadge
-                size="xs"
-                :color="tx.payment_status === 'paid' ? 'success' : tx.payment_status === 'partial' ? 'warning' : 'neutral'"
-                variant="subtle"
-                class="capitalize"
+              size="xs"
+              :color="tx.payment_status === 'paid' ? 'success' : 'neutral'"
+              variant="subtle"
+              class="capitalize"
             >
-                {{ tx.payment_status || 'unpaid' }}
+              {{ tx.payment_status || 'unpaid' }}
             </UBadge>
         </div>
       </div>

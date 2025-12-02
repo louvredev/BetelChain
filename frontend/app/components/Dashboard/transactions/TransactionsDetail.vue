@@ -38,7 +38,17 @@ const paymentLoading = ref(false)
 
 const formatDateTime = (d?: string | null) => {
   if (!d) return '-'
-  return format(new Date(d), 'dd MMM yyyy HH:mm')
+  const date = new Date(d)
+  // Format dengan timezone GMT+7 (Jakarta)
+  return date.toLocaleString('id-ID', { 
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
 }
 
 const formatCurrency = (v?: number | null) => {
@@ -180,14 +190,23 @@ const onApprovePayment = async () => {
   try {
     approvePaymentLoading.value = true
     await approvePayment(payment.value.id, 'approved')
+
     toast.add({
       title: 'Payment approved',
       description: 'Payment has been approved successfully.',
       color: 'green'
     })
+
     await loadPayment()
     await loadSummary()
-    emit('updated')
+
+    // Emit updated transaction dengan payment_status terbaru
+    if (summary.value?.transaction) {
+      emit('updated', {
+        ...props.transaction,
+        payment_status: summary.value.transaction.payment_status || 'unpaid'
+      } as Transaction)
+    }
   } catch (error: any) {
     toast.add({
       title: 'Error',
@@ -198,6 +217,9 @@ const onApprovePayment = async () => {
     approvePaymentLoading.value = false
   }
 }
+
+
+
 
 // Camera & harvest
 const videoEl = ref<HTMLVideoElement | null>(null)
@@ -331,13 +353,6 @@ const tabs = computed(() => [
       </template>
 
       <template #right>
-        <UButton
-          color="neutral"
-          variant="ghost"
-          icon="i-lucide-rotate-cw"
-          :loading="refreshing"
-          @click="loadSummary"
-        />
       </template>
     </UDashboardNavbar>
 
@@ -400,9 +415,15 @@ const tabs = computed(() => [
                   </p>
                 </div>
                 <div>
-                  <p class="text-muted text-xs">Total price</p>
+                  <p class="text-muted text-xs">Price per sack</p>
                   <p class="font-medium">
-                    {{ summary.transaction.total_price ? formatCurrency(summary.transaction.total_price) : '-' }}
+                    {{
+                      summary.harvest_summary.total_records > 0
+                        ? formatCurrency(
+                            summary.transaction.initial_price / summary.harvest_summary.total_records
+                          )
+                        : '-'
+                    }}
                   </p>
                 </div>
                 <div>
@@ -457,7 +478,7 @@ const tabs = computed(() => [
           </div>
         </template>
 
-        <!-- Tab 2: Payment (NEW) -->
+        <!-- Tab 2: Payment -->
         <template #payment>
           <UCard>
             <template #header>
@@ -477,7 +498,29 @@ const tabs = computed(() => [
               </p>
               <DashboardTransactionsCreatePaymentModal
                 :transaction-id="transaction.id"
-                :initial-amount="summary?.transaction?.initial_price || 0"
+                :initial-amount="summary?.transaction?.total_price || summary?.transaction?.initial_price || 0"
+                @created="onPaymentCreated"
+              >
+                <template #default="{ open }">
+                  <UButton
+                    color="primary"
+                    size="sm"
+                    @click="open"
+                  >
+                    Create Payment
+                  </UButton>
+                </template>
+              </DashboardTransactionsCreatePaymentModal>
+            </div>
+
+            <!-- No payment yet -->
+            <div v-else-if="!payment" class="space-y-3">
+              <p class="text-sm text-muted">
+                No payment created yet for this transaction.
+              </p>
+              <DashboardTransactionsCreatePaymentModal
+                :transaction-id="transaction.id"
+                :initial-amount="summary?.transaction?.total_price || summary?.transaction?.initial_price || 0"
                 @created="onPaymentCreated"
               >
                 <template #default="{ open }">
@@ -532,10 +575,12 @@ const tabs = computed(() => [
                 </div>
               </div>
 
+              <!-- Approve button (hanya jika pending) -->
               <div v-if="payment.status === 'pending'" class="border-t border-default pt-3">
                 <UButton
                   color="success"
                   size="sm"
+                  class="w-full"
                   :loading="approvePaymentLoading"
                   @click="onApprovePayment"
                 >
@@ -545,6 +590,7 @@ const tabs = computed(() => [
             </div>
           </UCard>
         </template>
+       
 
         <!-- Tab 3: Harvest -->
         <template #harvest>
