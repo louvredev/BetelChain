@@ -285,30 +285,25 @@ async def approve_payment(
             txn = txn_check.data[0]
             total_price = txn.get("total_price") or txn.get("initial_price") or 0
             
-            # Determine new payment_status
+            # Determine new payment_status (cuma paid atau unpaid)
             if total_approved >= total_price and total_price > 0:
                 new_payment_status = "paid"
                 payment_completed_at = datetime.utcnow().isoformat()
-            elif total_approved > 0:
-                new_payment_status = "partial"
-                payment_completed_at = None
             else:
                 new_payment_status = "unpaid"
                 payment_completed_at = None
-            
+
             # Update transaction
             update_data = {
                 "payment_status": new_payment_status,
                 "updated_at": datetime.utcnow().isoformat()
             }
 
-            # Set payment_completed_at hanya kalau jadi "paid"
             if new_payment_status == "paid":
-                update_data["payment_completed_at"] = datetime.utcnow().isoformat()
+                update_data["payment_completed_at"] = payment_completed_at
 
             supabase.table("transactions").update(update_data).eq("id", transaction_id).execute()
-
-            
+           
             return {
                 "success": True,
                 "message": f"Payment {update.status}",
