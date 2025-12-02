@@ -297,10 +297,17 @@ async def approve_payment(
                 payment_completed_at = None
             
             # Update transaction
-            supabase.table("transactions").update({
+            update_data = {
                 "payment_status": new_payment_status,
-                "payment_completed_at": payment_completed_at if new_payment_status == "paid" else txn.get("payment_completed_at")
-            }).eq("id", transaction_id).execute()
+                "updated_at": datetime.utcnow().isoformat()
+            }
+
+            # Set payment_completed_at hanya kalau jadi "paid"
+            if new_payment_status == "paid":
+                update_data["payment_completed_at"] = datetime.utcnow().isoformat()
+
+            supabase.table("transactions").update(update_data).eq("id", transaction_id).execute()
+
             
             return {
                 "success": True,
