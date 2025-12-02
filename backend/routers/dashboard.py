@@ -174,11 +174,12 @@ async def farmers_payment_summary(
     x_warehouse_id: str = Header(..., alias="X-Warehouse-ID")
 ):
     supabase = get_supabase_client()
+    
     # 1) Ambil semua farmers untuk warehouse ini
     farmers = supabase.table("farmers") \
         .select("*") \
         .eq("registered_by_warehouse", x_warehouse_id) \
-        .execute().data
+        .execute().data or []
 
     result = []
 
@@ -186,10 +187,12 @@ async def farmers_payment_summary(
         farmer_id = farmer["id"]
 
         # Ambil transaksi petani ini
-        txns = supabase.table("transactions").select("*").eq("farmer_id", farmer_id).execute().data or []
+        txns = supabase.table("transactions").select("*").eq(
+            "farmer_id", farmer_id
+        ).execute().data or []
+        
         txn_ids = [t["id"] for t in txns]
         totalTransactions = len(txns)
-        totalTagihan = sum(float(t.get("total_price") or 0) for t in txns)
 
         # Total payment (approved only)
         if txn_ids:
@@ -202,7 +205,6 @@ async def farmers_payment_summary(
             payments = []
 
         totalPaid = sum(float(p.get("amount") or 0) for p in payments)
-        totalOutstanding = max(0, totalTagihan - totalPaid)
 
         result.append({
             "id": farmer_id,
@@ -212,8 +214,8 @@ async def farmers_payment_summary(
             "bank_name": farmer.get("bank_name"),
             "is_active": farmer.get("is_active"),
             "totalTransactions": totalTransactions,
-            "totalPaid": totalPaid,
-            "totalOutstanding": totalOutstanding
+            "totalPaid": totalPaid
         })
 
     return result
+
