@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, format } from 'date-fns'
+import { format } from 'date-fns'
 import { VisXYContainer, VisLine, VisAxis, VisArea, VisCrosshair, VisTooltip } from '@unovis/vue'
 import type { Period, Range } from '~/types'
 
@@ -11,51 +11,60 @@ const props = defineProps<{
 }>()
 
 type DataRecord = {
-  date: Date
+  hour: Date
   amount: number
 }
 
 const { width } = useElementSize(cardRef)
+const { getSpentByHour } = useBetelchain()
 
 const data = ref<DataRecord[]>([])
+const loading = ref(false)
 
-watch([() => props.period, () => props.range], () => {
-  const dates = ({
-    daily: eachDayOfInterval,
-    weekly: eachWeekOfInterval,
-    monthly: eachMonthOfInterval
-  } as Record<Period, typeof eachDayOfInterval>)[props.period](props.range)
+const loadData = async () => {
+  try {
+    loading.value = true
 
-  const min = 1000
-  const max = 10000
+    const start = props.range.start.toISOString()
+    const end = props.range.end.toISOString()
 
-  data.value = dates.map(date => ({ date, amount: Math.floor(Math.random() * (max - min + 1)) + min }))
+    const raw = await getSpentByHour(start, end)
+
+    data.value = raw.map(item => ({
+      hour: new Date(item.hour),
+      amount: item.amount
+    }))
+
+    console.log('data loaded:', data.value)
+  } catch (e: any) {
+    console.error('Error loading data:', e)
+    data.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+watch([() => props.range.start, () => props.range.end], () => {
+  loadData()
 }, { immediate: true })
 
 const x = (_: DataRecord, i: number) => i
 const y = (d: DataRecord) => d.amount
 
-const total = computed(() => data.value.reduce((acc: number, { amount }) => acc + amount, 0))
+const total = computed(() => data.value.reduce((acc, { amount }) => acc + amount, 0))
 
-const formatNumber = new Intl.NumberFormat('en', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format
+const formatNumber = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format
 
-const formatDate = (date: Date): string => {
-  return ({
-    daily: format(date, 'd MMM'),
-    weekly: format(date, 'd MMM'),
-    monthly: format(date, 'MMM yyy')
-  })[props.period]
-}
+const formatHour = (date: Date): string => format(date, 'HH:mm')
 
 const xTicks = (i: number) => {
   if (i === 0 || i === data.value.length - 1 || !data.value[i]) {
     return ''
   }
-
-  return formatDate(data.value[i].date)
+  return formatHour(data.value[i].hour)
 }
 
-const template = (d: DataRecord) => `${formatDate(d.date)}: ${formatNumber(d.amount)}`
+const template = (d: DataRecord) => `${formatHour(d.hour)}: ${formatNumber(d.amount)}`
 </script>
 
 <template>
@@ -63,7 +72,7 @@ const template = (d: DataRecord) => `${formatDate(d.date)}: ${formatNumber(d.amo
     <template #header>
       <div>
         <p class="text-xs text-muted uppercase mb-1.5">
-          Revenue
+          Spent
         </p>
         <p class="text-3xl text-highlighted font-semibold">
           {{ formatNumber(total) }}
@@ -73,7 +82,7 @@ const template = (d: DataRecord) => `${formatDate(d.date)}: ${formatNumber(d.amo
 
     <VisXYContainer
       :data="data"
-      :padding="{ top: 40 }"
+      :padding="{ top: 20 }"
       class="h-96"
       :width="width"
     >

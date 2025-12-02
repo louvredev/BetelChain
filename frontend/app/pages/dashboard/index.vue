@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { sub } from 'date-fns'
-import type { Period, Range } from '~/types'
+import { startOfDay, endOfDay } from 'date-fns'
 
 definePageMeta({
   layout: 'dashboard'
 })
 
-const range = shallowRef<Range>({
-  start: sub(new Date(), { days: 14 }),
-  end: new Date()
-})
-const period = ref<Period>('daily')
+const period = ref<'daily'>('daily')
+
+// Range selalu 24 jam (hari ini, dari 00:00 hingga 23:59)
+const range = computed(() => ({
+  start: startOfDay(new Date()),
+  end: endOfDay(new Date())
+}))
 </script>
 
 <template>
@@ -21,13 +22,6 @@ const period = ref<Period>('daily')
           <UDashboardSidebarCollapse />
         </template>
       </UDashboardNavbar>
-
-      <UDashboardToolbar>
-        <template #left>
-          <DashboardHomeDateRangePicker v-model="range" class="-ms-1" />
-          <DashboardHomePeriodSelect v-model="period" :range="range" />
-        </template>
-      </UDashboardToolbar>
     </template>
 
     <template #body>

@@ -14,15 +14,68 @@ export const useBetelchain = () => {
 
   // Get warehouse ID from localStorage
   const getWarehouseId = async () => {
-  // 1) Cek localStorage dulu
-  const stored = localStorage.getItem('warehouseId')
-  if (stored) return stored
+    const stored = localStorage.getItem('warehouseId')
+    if (stored) return stored
 
-  // 2) UNTUK SEMENTARA: pakai dummy warehouse id (nanti diganti dari Supabase)
-  const demoId = '51b51eb1-2552-431e-b53b-b5bfb856a70b'
-  localStorage.setItem('warehouseId', demoId)
-  return demoId
+    const demoId = '51b51eb1-2552-431e-b53b-b5bfb856a70b'
+    localStorage.setItem('warehouseId', demoId)
+    return demoId
+  }
+
+  // ==================== DASHBOARD ====================
+
+  const getWarehouseDashboard = async () => {
+    const warehouseId = await getWarehouseId()
+
+    const response = await fetch(
+      `${BACKEND_URL}/api/dashboard/warehouse-summary`,
+      {
+        method: 'GET',
+        headers: {
+          'X-Warehouse-ID': warehouseId
+        }
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Failed to fetch warehouse summary')
+    }
+
+    return response.json() as Promise<{
+      warehouse_id: string
+      farmers_count: number
+      dominant_grade: string | null
+      dominant_grade_ratio: number
+      grades_breakdown: Record<string, number>
+      total_spent: number
+      total_sacks: number
+    }>
+  }
+
+  const getSpentByHour = async (start: string, end: string) => {
+  const warehouseId = await getWarehouseId()
+
+  const url = new URL(`${BACKEND_URL}/api/dashboard/spent-by-hour`)
+  url.searchParams.set('start', start)
+  url.searchParams.set('end', end)
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'X-Warehouse-ID': warehouseId
+    }
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to fetch spent by hour')
+  }
+
+  return response.json() as Promise<Array<{ hour: string; amount: number }>>
 }
+
+
 
   // ==================== FARMERS ====================
 
@@ -101,7 +154,6 @@ export const useBetelchain = () => {
       }
     )
 
-    // Kalau status 404/403/500 dll, baru lempar error
     if (!response.ok) {
       let msg = 'Failed to delete farmer'
       try {
@@ -113,7 +165,6 @@ export const useBetelchain = () => {
       throw new Error(msg)
     }
 
-    // Kalau 200/204, tidak wajib pakai response body
     try {
       return await response.json()
     } catch {
@@ -281,9 +332,25 @@ export const useBetelchain = () => {
 
   // ==================== PAYMENTS ====================
 
+  // BARU: Get payment untuk satu transaction (singular)
+  const getPaymentByTransaction = async (transactionId: string) => {
+    const response = await fetch(
+      `${BACKEND_URL}/api/payments/transaction/${transactionId}`,
+      { method: 'GET' }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Failed to fetch payment')
+    }
+
+    const data = await response.json()
+    return data.payment as Payment | null
+  }
+
+  // UPDATE: Create payment - transaction_id wajib, hapus payment_type
   const createPayment = async (payment: {
     transaction_id: string
-    payment_type: 'initial' | 'remaining'
     amount: number
     payment_method: string
     payment_note?: string
@@ -307,21 +374,6 @@ export const useBetelchain = () => {
     return response.json() as Promise<Payment>
   }
 
-  const listPayments = async (transactionId: string) => {
-    const response = await fetch(
-      `${BACKEND_URL}/api/payments/transaction/${transactionId}/list`,
-      { method: 'GET' }
-    )
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.detail || 'Failed to fetch payments')
-    }
-
-    const data = await response.json()
-    return data.payments as Payment[]
-  }
-
   const getPaymentSummary = async (transactionId: string) => {
     const response = await fetch(
       `${BACKEND_URL}/api/payments/transaction/${transactionId}/summary`,
@@ -337,27 +389,59 @@ export const useBetelchain = () => {
   }
 
   const approvePayment = async (paymentId: string, status: string) => {
-  const warehouseId = await getWarehouseId()
-  
-  const response = await fetch(
-    `${BACKEND_URL}/api/payments/${paymentId}/approve`,
-    {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Warehouse-ID': warehouseId
-      },
-      body: JSON.stringify({ status })
-    }
-  )
+    const warehouseId = await getWarehouseId()
+    
+    const response = await fetch(
+      `${BACKEND_URL}/api/payments/${paymentId}/approve`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Warehouse-ID': warehouseId
+        },
+        body: JSON.stringify({ status })
+      }
+    )
 
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.detail || 'Failed to approve payment')
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Failed to approve payment')
+    }
+
+    return response.json() as Promise<Payment>
   }
 
-  return response.json() as Promise<Payment>
-}
+  const getFarmersPaymentSummary = async () => {
+    const warehouseId = await getWarehouseId()
+
+    const response = await fetch(
+      `${BACKEND_URL}/api/dashboard/farmers-payment-summary`,
+      {
+        method: 'GET',
+        headers: {
+          'X-Warehouse-ID': warehouseId
+        }
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Failed to fetch farmers payment summary')
+    }
+
+    return response.json() as Promise<Array<{
+      id: string
+      farmer_code: string
+      full_name: string
+      phone: string | null
+      bank_name: string | null
+      is_active: boolean
+      totalTransactions: number
+      totalPaid: number
+      totalOutstanding: number
+    }>>
+  }
+
 
   return {
     // Farmers
@@ -376,9 +460,13 @@ export const useBetelchain = () => {
     detectAndSaveHarvest,
     getHarvestSummary,
     // Payments
+    getPaymentByTransaction,
     createPayment,
-    listPayments,
     getPaymentSummary,
-    approvePayment
+    approvePayment,
+    // Dashboard
+    getWarehouseDashboard,
+    getSpentByHour,
+    getFarmersPaymentSummary
   }
 }

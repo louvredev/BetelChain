@@ -91,24 +91,9 @@ const isMobile = breakpoints.smaller('lg')
       <template #leading>
         <UDashboardSidebarCollapse />
       </template>
-
-      <template #trailing>
-        <UBadge :label="filteredTransactions.length" variant="subtle" />
-      </template>
-
+     
       <template #right>
         <DashboardTransactionsCreateModal @created="fetchTransactions" />
-        <USelect
-          v-model="statusFilter"
-          :items="[
-            { label: 'All', value: 'all' },
-            { label: 'Unpaid', value: 'unpaid' },
-            { label: 'Partial', value: 'partial' },
-            { label: 'Paid', value: 'paid' }
-          ]"
-          size="xs"
-          class="min-w-28"
-        />
       </template>
     </UDashboardNavbar>
 

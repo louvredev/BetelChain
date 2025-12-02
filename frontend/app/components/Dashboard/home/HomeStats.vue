@@ -1,67 +1,114 @@
 <script setup lang="ts">
-import type { Period, Range, Stat } from '~/types'
+import type { Period, Range } from '~/types'
 
 const props = defineProps<{
   period: Period
   range: Range
 }>()
 
-function formatCurrency(value: number): string {
-  return value.toLocaleString('en-US', {
+const { getWarehouseDashboard } = useBetelchain()
+
+const formatCurrency = (value: number): string => {
+  return value.toLocaleString('id-ID', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'IDR',
     maximumFractionDigits: 0
   })
 }
 
-const baseStats = [{
-  title: 'Farmers',
-  icon: 'i-lucide-users',
-  minValue: 400,
-  maxValue: 1000,
-  minVariation: -15,
-  maxVariation: 25
-}, {
-  title: 'Grades',
-  icon: 'i-lucide-chart-pie',
-  minValue: 1000,
-  maxValue: 2000,
-  minVariation: -10,
-  maxVariation: 20
-}, {
-  title: 'Spent',
-  icon: 'i-lucide-circle-dollar-sign',
-  minValue: 200000,
-  maxValue: 500000,
-  minVariation: -20,
-  maxVariation: 30,
-  formatter: formatCurrency
-}, {
-  title: 'Sacks',
-  icon: 'i-lucide-shopping-cart',
-  minValue: 100,
-  maxValue: 300,
-  minVariation: -5,
-  maxVariation: 15
-}]
+// Data untuk 4 kartu
+const stats = ref([
+  {
+    title: 'Farmers',
+    icon: 'i-lucide-users',
+    value: '-',
+    variation: 0
+  },
+  {
+    title: 'Major grade',
+    icon: 'i-lucide-chart-pie',
+    value: '-',
+    variation: 0
+  },
+  {
+    title: 'Spent',
+    icon: 'i-lucide-circle-dollar-sign',
+    value: '-',
+    variation: 0
+  },
+  {
+    title: 'Sacks',
+    icon: 'i-lucide-shopping-cart',
+    value: '-',
+    variation: 0
+  }
+])
 
-const { data: stats } = await useAsyncData<Stat[]>('stats', async () => {
-  return baseStats.map((stat) => {
-    const value = randomInt(stat.minValue, stat.maxValue)
-    const variation = randomInt(stat.minVariation, stat.maxVariation)
+const loading = ref(true)
+const error = ref<string | null>(null)
 
-    return {
-      title: stat.title,
-      icon: stat.icon,
-      value: stat.formatter ? stat.formatter(value) : value,
-      variation
-    }
-  })
-}, {
-  watch: [() => props.period, () => props.range],
-  default: () => []
-})
+const loadDashboard = async () => {
+  try {
+    loading.value = true
+    error.value = null
+
+    const data = await getWarehouseDashboard()
+
+    const dominantPercent = data.dominant_grade
+      ? Math.round(data.dominant_grade_ratio * 100)
+      : 0
+
+    stats.value = [
+      {
+        title: 'Farmers',
+        icon: 'i-lucide-users',
+        value: data.farmers_count.toString(),
+        variation: 0
+      },
+      {
+        title: 'Major grade',
+        icon: 'i-lucide-chart-pie',
+        value: data.dominant_grade || '-',
+        variation: 0,
+        badge: data.dominant_grade
+          ? {
+              label: `${Math.round(data.dominant_grade_ratio * 100)}%`,
+              color: 'primary'
+            }
+          : null
+      },
+      {
+        title: 'Spent',
+        icon: 'i-lucide-circle-dollar-sign',
+        value: formatCurrency(data.total_spent),
+        variation: 0
+      },
+      {
+        title: 'Sacks',
+        icon: 'i-lucide-shopping-cart',
+        value: data.total_sacks.toString(),
+        variation: 0
+      }
+    ]
+  } catch (e: any) {
+    error.value = e.message || 'Failed to load dashboard summary'
+  } finally {
+    loading.value = false
+  }
+}
+
+// Load sekali saat mount (opsional: bisa juga re-load saat range/period berubah)
+await loadDashboard()
+
+watch(
+  () => [props.period, props.range],
+  () => {
+    // Untuk sekarang bisa diabaikan (murni summary total), 
+    // atau nanti di-make dynamic by period
+  }
+)
 </script>
+
 
 <template>
   <UPageGrid class="lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-px">
@@ -70,7 +117,6 @@ const { data: stats } = await useAsyncData<Stat[]>('stats', async () => {
       :key="index"
       :icon="stat.icon"
       :title="stat.title"
-      to="/dashboard/customers"
       variant="subtle"
       :ui="{
         container: 'gap-y-1.5',
@@ -81,18 +127,28 @@ const { data: stats } = await useAsyncData<Stat[]>('stats', async () => {
       class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
     >
       <div class="flex items-center gap-2">
-        <span class="text-2xl font-semibold text-highlighted">
+        <span class="text-2xl font-semibold text-lg">
           {{ stat.value }}
         </span>
 
         <UBadge
+          v-if="stat.variation !== 0"
           :color="stat.variation > 0 ? 'success' : 'error'"
           variant="subtle"
           class="text-xs"
         >
           {{ stat.variation > 0 ? '+' : '' }}{{ stat.variation }}%
         </UBadge>
+        <UBadge
+          v-if="stat.badge"
+          :color="stat.badge.color"
+          variant="subtle"
+          class="text-xs"
+        >
+          {{ stat.badge.label }}
+        </UBadge>
       </div>
     </UPageCard>
   </UPageGrid>
 </template>
+

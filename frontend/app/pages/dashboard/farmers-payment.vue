@@ -9,7 +9,7 @@ definePageMeta({
   layout: 'dashboard'
 })
 
-const { listFarmers } = useBetelchain()
+const { getFarmersPaymentSummary } = useBetelchain()
 const toast = useToast()
 const table = useTemplateRef('table')
 
@@ -21,35 +21,26 @@ const columnFilters = ref([{
 const columnVisibility = ref()
 const rowSelection = ref({})
 
-// Data farmers dari backend + data turunan untuk payment
-const farmersRaw = ref<Farmer[]>([])
+// Data summary farmers + payments dari backend
+const farmerData = ref<any[]>([])
 const status = ref<'idle' | 'pending' | 'success' | 'error'>('idle')
-
-// Simulated farmer-payment data (sementara, nanti bisa diganti summary dari backend)
-const farmerData = computed(() => {
-  return farmersRaw.value.map(farmer => ({
-    ...farmer,
-    totalTransactions: Math.floor(Math.random() * 15) + 1,
-    totalPaid: Math.floor(Math.random() * 100_000_000),
-    totalOutstanding: Math.floor(Math.random() * 50_000_000)
-  }))
-})
 
 const fetchFarmers = async () => {
   status.value = 'pending'
   try {
-    const data = await listFarmers()
-    farmersRaw.value = data
+    const data = await getFarmersPaymentSummary()
+    farmerData.value = data
     status.value = 'success'
   } catch (error: any) {
     status.value = 'error'
     toast.add({
       title: 'Error',
-      description: error.message || 'Failed to fetch farmers',
+      description: error.message || 'Failed to fetch farmers payment summary',
       color: 'red'
     })
   }
 }
+
 
 await fetchFarmers()
 
@@ -139,17 +130,6 @@ const columns: TableColumn<any>[] = [
     accessorKey: 'totalOutstanding',
     header: 'Outstanding',
     cell: ({ row }) => formatCurrency(row.original.totalOutstanding)
-  },
-  {
-    accessorKey: 'is_active',
-    header: 'Status',
-    cell: ({ row }) => {
-      const UBadge = resolveComponent('UBadge')
-      const active = row.original.is_active
-      return h(UBadge, { color: active ? 'success' : 'error', variant: 'subtle' }, () =>
-        active ? 'Active' : 'Inactive'
-      )
-    }
   },
   {
     id: 'actions',
@@ -266,20 +246,7 @@ const onRegisterSuccess = () => {
               </UButton>
             </template>
           </DashboardFarmersDeleteModal>
-
-          <!-- Status filter -->
-          <USelect
-            v-model="statusFilter"
-            :items="[
-              { label: 'All', value: 'all' },
-              { label: 'Active', value: 'active' },
-              { label: 'Inactive', value: 'inactive' }
-            ]"
-            :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-            placeholder="Filter status"
-            class="min-w-28"
-          />
-
+          
           <!-- Column visibility menu (optional, sama seperti customers) -->
           <UDropdownMenu
             :items="
@@ -306,17 +273,7 @@ const onRegisterSuccess = () => {
               variant="outline"
               trailing-icon="i-lucide-settings-2"
             />
-          </UDropdownMenu>
-
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-lucide-rotate-cw"
-            :loading="status === 'pending'"
-            @click="fetchFarmers"
-          >
-            Refresh
-          </UButton>
+          </UDropdownMenu>        
         </div>
       </div>
 

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { format } from 'date-fns'
 import type { Transaction, Payment } from '~/types/betelchain'
-const isDev = process.env.NODE_ENV === 'development'
 
 const props = defineProps<{
   transaction: Transaction
@@ -17,7 +16,7 @@ const {
   startRecording,
   completeRecording,
   detectAndSaveHarvest,
-  listPayments,
+  getPaymentByTransaction,
   createPayment,
   approvePayment
 } = useBetelchain()
@@ -34,6 +33,9 @@ const summary = ref<{
   payment_summary: any
 } | null>(null)
 
+const payment = ref<Payment | null>(null)
+const paymentLoading = ref(false)
+
 const formatDateTime = (d?: string | null) => {
   if (!d) return '-'
   return format(new Date(d), 'dd MMM yyyy HH:mm')
@@ -49,19 +51,20 @@ const formatCurrency = (v?: number | null) => {
   }).format(v)
 }
 
-const loadPayments = async () => {
+const loadPayment = async () => {
   if (!props.transaction?.id) return
   try {
-    paymentsLoading.value = true
-    payments.value = await listPayments(props.transaction.id)
+    paymentLoading.value = true
+    const paymentData = await getPaymentByTransaction(props.transaction.id)
+    payment.value = paymentData
   } catch (error: any) {
     toast.add({
       title: 'Error',
-      description: error.message || 'Failed to load payments',
+      description: error.message || 'Failed to load payment',
       color: 'red'
     })
   } finally {
-    paymentsLoading.value = false
+    paymentLoading.value = false
   }
 }
 
@@ -72,7 +75,7 @@ const loadSummary = async () => {
     refreshing.value = !!summary.value
     const data = await getTransactionSummary(props.transaction.id)
     summary.value = data
-    await loadPayments()  // <— tambah di sini
+    await loadPayment()
   } catch (error: any) {
     toast.add({
       title: 'Error',
@@ -85,11 +88,11 @@ const loadSummary = async () => {
   }
 }
 
-// reload saat transaction yang dipilih berubah
 watch(
   () => props.transaction.id,
   () => {
     summary.value = null
+    payment.value = null
     loadSummary()
   },
   { immediate: true }
@@ -99,12 +102,19 @@ const onStartRecording = async () => {
   if (!props.transaction.id) return
   try {
     actionLoading.value = 'start'
+
+    // 1) Start recording di backend
     await startRecording(props.transaction.id)
+
+    // 2) Buka kamera setelah recording berhasil
+    await openCamera()
+
     toast.add({
       title: 'Recording started',
-      description: 'Recording for this transaction has started.',
+      description: 'Recording has started and camera is open.',
       color: 'green'
     })
+
     await loadSummary()
     emit('updated')
   } catch (error: any) {
@@ -118,16 +128,24 @@ const onStartRecording = async () => {
   }
 }
 
+
 const onCompleteRecording = async () => {
   if (!props.transaction.id) return
   try {
     actionLoading.value = 'complete'
+
+    // 1) Tutup kamera dulu
+    closeCamera()
+
+    // 2) Tandai recording selesai di backend
     await completeRecording(props.transaction.id)
+
     toast.add({
       title: 'Recording completed',
       description: 'Recording has been completed and totals calculated.',
       color: 'green'
     })
+
     await loadSummary()
     emit('updated')
   } catch (error: any) {
@@ -140,67 +158,55 @@ const onCompleteRecording = async () => {
     actionLoading.value = null
   }
 }
-const payments = ref<Payment[]>([])
-const paymentsLoading = ref(false)
 
-const addPaymentOpen = ref(false)
-const addPaymentLoading = ref(false)
 
-const paymentForm = reactive({
-  payment_type: 'remaining' as 'initial' | 'remaining',
-  amount: 0,
-  payment_method: 'cash',
-  payment_note: ''
-})
+const recordingStarted = computed(() => !!summary.value?.transaction?.recording_started_at)
+const recordingCompleted = computed(() => !!summary.value?.transaction?.recording_completed_at)
 
-const resetPaymentForm = () => {
-  paymentForm.payment_type = 'remaining'
-  paymentForm.amount = 0
-  paymentForm.payment_method = 'cash'
-  paymentForm.payment_note = ''
+
+const createPaymentModalOpen = ref(false)
+
+const onPaymentCreated = async () => {
+  createPaymentModalOpen.value = false
+  await loadPayment()
+  await loadSummary()
+  emit('updated')
 }
 
-const onAddPayment = async () => {
-  if (!props.transaction.id || !summary.value) return
+const approvePaymentLoading = ref(false)
+
+const onApprovePayment = async () => {
+  if (!payment.value?.id) return
   try {
-    addPaymentLoading.value = true
-
-    await createPayment({
-      transaction_id: props.transaction.id,
-      payment_type: paymentForm.payment_type,
-      amount: paymentForm.amount,
-      payment_method: paymentForm.payment_method,
-      payment_note: paymentForm.payment_note || undefined
-    })
-
+    approvePaymentLoading.value = true
+    await approvePayment(payment.value.id, 'approved')
     toast.add({
-      title: 'Payment created',
-      description: 'Payment has been recorded.',
+      title: 'Payment approved',
+      description: 'Payment has been approved successfully.',
       color: 'green'
     })
-
-    addPaymentOpen.value = false
-    resetPaymentForm()
+    await loadPayment()
     await loadSummary()
-    await loadPayments()  // <— TAMBAH BARIS INI
     emit('updated')
   } catch (error: any) {
     toast.add({
       title: 'Error',
-      description: error.message || 'Failed to create payment',
+      description: error.message || 'Failed to approve payment',
       color: 'red'
     })
   } finally {
-    addPaymentLoading.value = false
+    approvePaymentLoading.value = false
   }
 }
 
+// Camera & harvest
 const videoEl = ref<HTMLVideoElement | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const cameraStream = ref<MediaStream | null>(null)
 const cameraOpen = ref(false)
 const cameraLoading = ref(false)
 const scanning = ref(false)
+
 const openCamera = async () => {
   try {
     cameraLoading.value = true
@@ -303,34 +309,10 @@ const scanSack = async () => {
     scanning.value = false
   }
 }
-const approvePaymentLoading = ref<string | null>(null)
-const isPaymentFinal = (status: string) => status !== 'pending'
 
-const onChangePaymentStatus = async (paymentId: string, status: 'approved' | 'rejected') => {
-  try {
-    approvePaymentLoading.value = paymentId + status
-    await approvePayment(paymentId, status)
-    toast.add({
-      title: 'Payment updated',
-      description: `Payment has been ${status}.`,
-      color: 'green'
-    })
-    await loadSummary()
-    await loadPayments()  // <— TAMBAH BARIS INI
-    emit('updated')
-  } catch (error: any) {
-    toast.add({
-      title: 'Error',
-      description: error.message || 'Failed to update payment',
-      color: 'red'
-    })
-  } finally {
-    approvePaymentLoading.value = null
-  }
-}
 const tabs = computed(() => [
   { label: 'Summary', slot: 'summary' },
-  { label: 'Payments', slot: 'payments' },
+  { label: 'Payment', slot: 'payment' },
   { label: 'Harvest', slot: 'harvest' }
 ])
 </script>
@@ -360,7 +342,7 @@ const tabs = computed(() => [
     </UDashboardNavbar>
 
     <div class="flex flex-col gap-4 p-4 sm:p-6 overflow-y-auto h-full">
-      <!-- Status + actions (tetap di atas tabs) -->
+      <!-- Status + actions -->
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="space-y-1">
           <p class="text-sm text-muted">
@@ -386,30 +368,6 @@ const tabs = computed(() => [
           >
             {{ summary?.transaction?.payment_status || transaction.payment_status || 'unpaid' }}
           </UBadge>
-
-          <UButton
-            size="xs"
-            color="primary"
-            variant="subtle"
-            icon="i-lucide-play-circle"
-            :loading="actionLoading === 'start'"
-            :disabled="!!summary?.transaction?.recording_started_at"
-            @click="onStartRecording"
-          >
-            Start recording
-          </UButton>
-
-          <UButton
-            size="xs"
-            color="primary"
-            variant="solid"
-            icon="i-lucide-check-circle"
-            :loading="actionLoading === 'complete'"
-            :disabled="!summary?.transaction?.recording_started_at || !!summary?.transaction?.recording_completed_at"
-            @click="onCompleteRecording"
-          >
-            Complete recording
-          </UButton>
         </div>
       </div>
 
@@ -423,7 +381,6 @@ const tabs = computed(() => [
         <!-- Tab 1: Summary -->
         <template #summary>
           <div class="space-y-4">
-            <!-- Transaction summary -->
             <UCard>
               <template #header>
                 <p class="font-semibold text-sm">Transaction summary</p>
@@ -463,7 +420,6 @@ const tabs = computed(() => [
               </div>
             </UCard>
 
-            <!-- Harvest summary -->
             <UCard>
               <template #header>
                 <p class="font-semibold text-sm">Harvest summary</p>
@@ -501,173 +457,96 @@ const tabs = computed(() => [
           </div>
         </template>
 
-        <!-- Tab 2: Payments -->
-        <template #payments>
+        <!-- Tab 2: Payment (NEW) -->
+        <template #payment>
           <UCard>
             <template #header>
               <div class="flex items-center justify-between">
-                <p class="font-semibold text-sm">Payment summary</p>
-                <UButton
-                  size="xs"
-                  color="primary"
-                  variant="subtle"
-                  icon="i-lucide-plus"
-                  @click="addPaymentOpen = !addPaymentOpen"
-                >
-                  {{ addPaymentOpen ? 'Close' : 'Add payment' }}
-                </UButton>
+                <p class="font-semibold text-sm">Payment</p>
               </div>
             </template>
 
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm mb-4">
-              <div>
-                <p class="text-muted text-xs">Total approved</p>
-                <p class="font-medium">
-                  {{ formatCurrency(summary.payment_summary.total_approved) }}
-                </p>
-              </div>
-              <div>
-                <p class="text-muted text-xs">Remaining needed</p>
-                <p class="font-medium">
-                  {{ formatCurrency(summary.payment_summary.remaining_needed) }}
-                </p>
-              </div>
-              <div>
-                <p class="text-muted text-xs">Payments count</p>
-                <p class="font-medium">
-                  {{ summary.payment_summary.total_payments }}
-                </p>
-              </div>
+            <div v-if="paymentLoading" class="text-sm text-muted">
+              Loading payment...
             </div>
 
-            <div class="border-t border-default pt-3">
-              <p class="text-xs text-muted mb-2">Payments</p>
+            <!-- No payment yet -->
+            <div v-else-if="!payment" class="space-y-3">
+              <p class="text-sm text-muted">
+                No payment created yet for this transaction.
+              </p>
+              <DashboardTransactionsCreatePaymentModal
+                :transaction-id="transaction.id"
+                :initial-amount="summary?.transaction?.initial_price || 0"
+                @created="onPaymentCreated"
+              >
+                <template #default="{ open }">
+                  <UButton
+                    color="primary"
+                    size="sm"
+                    @click="open"
+                  >
+                    Create Payment
+                  </UButton>
+                </template>
+              </DashboardTransactionsCreatePaymentModal>
+            </div>
 
-              <div v-if="paymentsLoading" class="text-xs text-muted">
-                Loading payments...
-              </div>
-
-              <div v-else-if="!payments.length" class="text-xs text-muted">
-                No payments recorded yet.
-              </div>
-
-              <div v-else class="space-y-2 text-xs">
-                <div
-                  v-for="p in payments"
-                  :key="p.id"
-                  class="flex items-center justify-between gap-3"
-                >
-                  <div>
-                    <p class="font-medium">
-                      {{ formatCurrency(p.amount) }}
-                    </p>
-                    <p class="text-muted">
-                      {{ p.payment_type }} • {{ p.payment_method }}
-                    </p>
-                  </div>
-
-                  <div class="flex flex-col items-end gap-1">
-                    <div class="flex items-center gap-2">
-                      <UBadge
-                        size="xs"
-                        :color="p.status === 'approved' ? 'success' : p.status === 'pending' ? 'warning' : 'neutral'"
-                        variant="subtle"
-                        class="capitalize"
-                      >
-                        {{ p.status }}
-                      </UBadge>
-                      <p class="text-muted text-xs">
-                        {{ formatDateTime(p.created_at) }}
-                      </p>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                      <UButton
-                        size="2xs"
-                        color="success"
-                        variant="soft"
-                        :disabled="isPaymentFinal(p.status) || approvePaymentLoading === p.id + 'approved'"
-                        :loading="approvePaymentLoading === p.id + 'approved'"
-                        @click="onChangePaymentStatus(p.id, 'approved')"
-                      >
-                        Approve
-                      </UButton>
-                      <UButton
-                        size="2xs"
-                        color="red"
-                        variant="soft"
-                        :disabled="isPaymentFinal(p.status) || approvePaymentLoading === p.id + 'rejected'"
-                        :loading="approvePaymentLoading === p.id + 'rejected'"
-                        @click="onChangePaymentStatus(p.id, 'rejected')"
-                      >
-                        Reject
-                      </UButton>
-                    </div>
+            <!-- Payment exists -->
+            <div v-else class="space-y-4">
+              <div class="grid gap-3 text-sm">
+                <div>
+                  <p class="text-muted text-xs">Amount</p>
+                  <p class="font-medium">
+                    {{ formatCurrency(payment.amount) }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-muted text-xs">Method</p>
+                  <p class="font-medium capitalize">
+                    {{ payment.payment_method }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-muted text-xs">Status</p>
+                  <div class="flex items-center gap-2">
+                    <UBadge
+                      size="sm"
+                      :color="payment.status === 'approved' ? 'success' : 'warning'"
+                      variant="subtle"
+                      class="capitalize"
+                    >
+                      {{ payment.status }}
+                    </UBadge>
                   </div>
                 </div>
+                <div v-if="payment.payment_note">
+                  <p class="text-muted text-xs">Note</p>
+                  <p class="text-sm">{{ payment.payment_note }}</p>
+                </div>
+                <div>
+                  <p class="text-muted text-xs">Created at</p>
+                  <p class="text-xs">
+                    {{ formatDateTime(payment.created_at) }}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <!-- inline Add payment form -->
-            <div v-if="addPaymentOpen" class="mt-4 border-t border-default pt-3 space-y-4">
-              <p class="text-xs text-muted">Add payment</p>
-
-              <UFormField label="Payment type">
-                <USelect
-                  v-model="paymentForm.payment_type"
-                  :items="[
-                    { label: 'Initial', value: 'initial' },
-                    { label: 'Remaining', value: 'remaining' }
-                  ]"
-                />
-              </UFormField>
-
-              <UFormField label="Amount (IDR)">
-                <UInput
-                  v-model.number="paymentForm.amount"
-                  type="number"
-                  min="0"
-                  placeholder="e.g. 1000000"
-                />
-              </UFormField>
-
-              <UFormField label="Method">
-                <UInput
-                  v-model="paymentForm.payment_method"
-                  placeholder="e.g. cash, transfer"
-                />
-              </UFormField>
-
-              <UFormField label="Note (optional)">
-                <UTextarea
-                  v-model="paymentForm.payment_note"
-                  :rows="2"
-                />
-              </UFormField>
-
-              <div class="flex justify-end gap-2 pt-2">
+              <div v-if="payment.status === 'pending'" class="border-t border-default pt-3">
                 <UButton
-                  color="gray"
-                  variant="subtle"
-                  type="button"
-                  :disabled="addPaymentLoading"
-                  @click="addPaymentOpen = false"
+                  color="success"
+                  size="sm"
+                  :loading="approvePaymentLoading"
+                  @click="onApprovePayment"
                 >
-                  Cancel
-                </UButton>
-                <UButton
-                  color="primary"
-                  :loading="addPaymentLoading"
-                  @click="onAddPayment"
-                >
-                  Save payment
+                  Approve Payment
                 </UButton>
               </div>
             </div>
           </UCard>
         </template>
 
-        <!-- Tab 3: Harvest capture (test) -->
+        <!-- Tab 3: Harvest -->
         <template #harvest>
           <UCard>
             <template #header>
@@ -675,14 +554,40 @@ const tabs = computed(() => [
                 <p class="font-semibold text-sm">Harvest capture</p>
                 <div class="flex items-center gap-2">
                   <UButton
+                    v-if="!recordingStarted"
                     size="xs"
-                    color="neutral"
-                    variant="outline"
-                    :loading="cameraLoading"
-                    @click="cameraOpen ? closeCamera() : openCamera()"
+                    color="primary"
+                    variant="subtle"
+                    icon="i-lucide-play-circle"
+                    :loading="actionLoading === 'start'"
+                    @click="onStartRecording"
                   >
-                    {{ cameraOpen ? 'Close camera' : 'Open camera' }}
+                    Start recording
                   </UButton>
+
+                  <UButton
+                    v-else-if="!recordingCompleted"
+                    size="xs"
+                    color="primary"
+                    variant="solid"
+                    icon="i-lucide-check-circle"
+                    :loading="actionLoading === 'complete'"
+                    @click="onCompleteRecording"
+                  >
+                    Complete recording
+                  </UButton>
+
+                  <UButton
+                    v-else
+                    size="xs"
+                    color="gray"
+                    variant="soft"
+                    icon="i-lucide-check"
+                    disabled
+                  >
+                    Recording completed
+                  </UButton>
+
                   <UButton
                     size="xs"
                     color="primary"
@@ -717,14 +622,10 @@ const tabs = computed(() => [
               </p>
             </div>
 
-            <!-- Canvas hidden untuk capture frame -->
             <canvas ref="canvasEl" class="hidden" />
           </UCard>
         </template>
-
       </UTabs>
     </div>
   </UDashboardPanel>
 </template>
-
-
