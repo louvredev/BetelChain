@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Header
-from datetime import datetime
+from datetime import datetime, timezone
 from supabase import create_client, Client
 from pydantic import BaseModel
 from typing import Optional
@@ -77,7 +77,7 @@ async def create_transaction(
             "farmer_id": transaction_data.farmer_id,
             "initial_price": transaction_data.initial_price,
             "payment_status": "unpaid",  # Selalu unpaid di awal
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }).execute()
         
         if not txn_response.data:
@@ -170,7 +170,7 @@ async def start_recording(
         
         # Update recording_started_at
         response = supabase.table("transactions").update({
-            "recording_started_at": datetime.utcnow().isoformat()
+            "recording_started_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", transaction_id).execute()
         
         if not response.data:
@@ -235,7 +235,7 @@ async def complete_recording(
         
         # Update transaction
         response = supabase.table("transactions").update({
-            "recording_completed_at": datetime.utcnow().isoformat(),
+            "recording_completed_at": datetime.now(timezone.utc).isoformat(),
             "total_weight_kg": round(total_weight_kg, 2),
             "total_price": round(total_price, 2)
         }).eq("id", transaction_id).execute()
